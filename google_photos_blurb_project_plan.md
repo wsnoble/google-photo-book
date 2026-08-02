@@ -51,8 +51,10 @@ hardcover photo book while preserving photo captions.
     `build`) — thin, well-typed, plays nicely with `uv run`.
 -   **Core libraries**:
     -   `Pillow` + `pillow-heif` — image reading, EXIF, dimensions,
-        HEIC decoding (requires `libheif` on the system; document the
-        `brew install libheif` step for macOS).
+        HEIC decoding. Verified (via `otool -L` on the installed wheel)
+        that `pillow-heif`'s macOS wheel bundles its own `libheif`
+        (`@loader_path/pillow_heif/.dylibs/...`) rather than linking a
+        system one, so no `brew install libheif` step is needed.
     -   `pydantic` — YAML config validation with clear error messages.
     -   `PyYAML` — config parsing.
     -   `Jinja2` + `WeasyPrint` — HTML/CSS → PDF rendering (WeasyPrint

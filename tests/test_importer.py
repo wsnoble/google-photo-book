@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
+
+from PIL import Image
 
 from photobook.importer import scan_album
 
@@ -69,6 +72,24 @@ def test_photo_without_metadata_is_flagged_unmatched_with_unknown_timestamp(
     assert "no metadata file matched" in photo.warnings
     assert "no caption" in photo.warnings
     assert "timestamp unknown" in photo.warnings
+
+
+def test_exif_timestamp_fallback_is_timezone_aware(tmp_path: Path) -> None:
+    # No JSON sidecar, so the importer must fall back to EXIF DateTimeOriginal.
+    image_path = tmp_path / "IMG_9999.jpg"
+    img = Image.new("RGB", (400, 300), (0, 0, 0))
+    exif = img.getexif()
+    exif[36867] = "2020:01:02 03:04:05"  # DateTimeOriginal
+    img.save(image_path, exif=exif.tobytes())
+
+    result = scan_album(tmp_path)
+
+    photo = _by_stem(result.photos, "IMG_9999")
+    assert photo.timestamp_source == "exif"
+    assert photo.timestamp == datetime(2020, 1, 2, 3, 4, 5, tzinfo=UTC)
+    # Must not raise: comparing against an aware datetime would TypeError
+    # if the EXIF path still returned a naive one.
+    assert photo.timestamp < datetime.now(UTC)
 
 
 def test_orphan_metadata_file_is_reported_as_unused(sample_takeout: Path) -> None:
