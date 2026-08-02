@@ -42,3 +42,9 @@ uv run pytest        # run tests
 uv run ruff check .  # lint
 uv run ruff format . # format
 ```
+
+## Contributing
+
+All changes land via pull request — `main` requires at least one
+approving review, and the CI workflow (`ruff check`, `ruff format
+--check`, `pytest`) must pass before merging.
