@@ -86,9 +86,9 @@ google-photo-book/
       render.py              # Jinja2 + WeasyPrint rendering
       proof.py                # proof PDF generation
       frontmatter.py           # title/copyright/TOC/chapter pages
-  templates/
-    book.html.jinja
-    proof.html.jinja
+      templates/                # inside the package (not repo root), so
+        proof.html.jinja        # FileSystemLoader finds them regardless
+        book.html.jinja         # of install location
   tests/
     fixtures/
       sample_takeout/          # tiny synthetic Takeout export, checked in
@@ -183,10 +183,27 @@ Fallbacks:
 
 -   `creationTime`
 -   EXIF
+-   Unknown: appended at the end, in scan order (implemented in
+    `ordering.py` as Milestone 2's stopgap; see caveat below).
+
+Verified (2026-08-02) that Google Photos' custom manual album
+ordering — dragging photos into a deliberate sequence in the album UI,
+distinct from chronological order — is **not recoverable** from a
+Takeout export: the per-photo JSON has no position field, and the
+album-level `metadata.json` contains only `{"title": ...}`. The
+Photos Library API's read scope was locked down in March 2025 to
+app-created content only, so it can no longer read an existing
+album's order either. No community tool (e.g. GooglePhotosTakeoutHelper)
+has solved this. Saving the album page as HTML only captures a subset
+because the web UI virtualizes/lazy-loads the photo grid.
 
 Future enhancement:
 
--   Optional manual ordering file.
+-   Optional manual ordering file — given the above, this is the
+    realistic path for albums with a deliberate (non-chronological)
+    curated sequence: let the user specify explicit positions for the
+    handful of photos where automatic sort gets it wrong, rather than
+    trying to solve full order recovery.
 
 ------------------------------------------------------------------------
 

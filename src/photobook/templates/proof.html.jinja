@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Proof Book</title>
+<style>
+  @page {
+    size: Letter;
+    margin: 0.5in;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 9pt;
+    color: #111;
+  }
+  h1 {
+    font-size: 14pt;
+    margin-bottom: 0.05in;
+  }
+  .meta {
+    font-size: 8pt;
+    color: #666;
+    margin-bottom: 0.3in;
+  }
+  .entry {
+    display: flex;
+    gap: 0.15in;
+    padding: 0.1in 0;
+    border-bottom: 1px solid #ddd;
+    break-inside: avoid;
+  }
+  .entry img {
+    max-width: 1.4in;
+    max-height: 1.4in;
+    object-fit: contain;
+  }
+  .entry .text {
+    flex: 1;
+  }
+  .entry .index {
+    color: #999;
+    font-size: 8pt;
+  }
+  .entry .filename {
+    font-weight: bold;
+  }
+  .entry .date {
+    color: #444;
+  }
+  .entry .caption {
+    margin-top: 0.05in;
+    font-style: italic;
+  }
+  .entry .no-caption {
+    margin-top: 0.05in;
+    color: #aaa;
+    font-style: italic;
+  }
+  .entry .warnings {
+    margin-top: 0.05in;
+    color: #b00000;
+    font-size: 8pt;
+  }
+</style>
+</head>
+<body>
+<h1>Proof Book</h1>
+<div class="meta">{{ entries|length }} photos &middot; generated {{ generated_at }}</div>
+
+{% for entry in entries %}
+<div class="entry">
+  <img src="{{ entry.thumbnail_data_uri }}" alt="">
+  <div class="text">
+    <div class="index">#{{ entry.index }}</div>
+    <div class="filename">{{ entry.filename }}</div>
+    <div class="date">{{ entry.date }}</div>
+    {% if entry.caption %}
+    <div class="caption">{{ entry.caption }}</div>
+    {% else %}
+    <div class="no-caption">(no caption)</div>
+    {% endif %}
+    {% if entry.warnings %}
+    <div class="warnings">&#9888; {{ entry.warnings|join(", ") }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+</body>
+</html>

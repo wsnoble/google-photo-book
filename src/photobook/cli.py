@@ -6,6 +6,7 @@ import typer
 from photobook import __version__
 from photobook.config import load_config
 from photobook.importer import scan_album
+from photobook.model import load_photos
 from photobook.validation import summarize, write_photos_json, write_report_csv, write_report_txt
 
 app = typer.Typer(help="Build a Blurb-ready photo book from a Google Takeout album export.")
@@ -56,6 +57,29 @@ def import_album(
 
     for key, value in summarize(result).items():
         typer.echo(f"{key}: {value}")
+
+
+@app.command()
+def proof(
+    photos_json: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, dir_okay=False, help="Path to the photos.json produced by `import`."
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path to write the proof PDF to."),
+    ] = Path("build/proof.pdf"),
+) -> None:
+    """Render a compact proof PDF (photo, filename, date, caption, warnings) for review."""
+    # Imported lazily: this pulls in WeasyPrint, which needs system libraries
+    # (pango) not required by the other commands.
+    from photobook.proof import build_proof_pdf
+
+    photos = load_photos(photos_json)
+    build_proof_pdf(photos, output)
+    typer.echo(f"Wrote proof PDF with {len(photos)} photos to {output}")
 
 
 def main() -> None:
