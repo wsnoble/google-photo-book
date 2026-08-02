@@ -1,0 +1,42 @@
+[project]
+name = "photobook"
+version = "0.1.0"
+description = "Build a Blurb-ready photo book PDF from a Google Takeout album export."
+readme = "README.md"
+authors = [
+    { name = "wsnoble", email = "wnoble@uw.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2>=3.1.6",
+    "pillow>=12.3.0",
+    "pillow-heif>=1.5.0",
+    "pydantic>=2.13.4",
+    "pypdf>=6.14.2",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.0",
+    "weasyprint>=69.0",
+]
+
+[project.scripts]
+photobook = "photobook.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
