@@ -33,12 +33,14 @@ _THUMBNAIL_MAX_SIZE = 400
 _THUMBNAIL_JPEG_QUALITY = 60
 
 
-def build_proof_pdf(photos: list[Photo], output_path: Path) -> None:
+def build_proof_pdf(
+    photos: list[Photo], output_path: Path, *, manual_order: list[str] | None = None
+) -> None:
     """Render a compact PDF listing every photo, in book order, with its
     filename, date, caption, and any warnings, for verifying the import
     before building the real layout.
     """
-    ordered = order_photos(photos)
+    ordered = order_photos(photos, manual_order=manual_order)
     entries = [
         {
             "index": index,

@@ -188,22 +188,35 @@ Fallbacks:
 
 Verified (2026-08-02) that Google Photos' custom manual album
 ordering — dragging photos into a deliberate sequence in the album UI,
-distinct from chronological order — is **not recoverable** from a
-Takeout export: the per-photo JSON has no position field, and the
-album-level `metadata.json` contains only `{"title": ...}`. The
+distinct from chronological order — is **not recoverable from a
+Takeout export itself**: the per-photo JSON has no position field, and
+the album-level `metadata.json` contains only `{"title": ...}`. The
 Photos Library API's read scope was locked down in March 2025 to
 app-created content only, so it can no longer read an existing
 album's order either. No community tool (e.g. GooglePhotosTakeoutHelper)
 has solved this. Saving the album page as HTML only captures a subset
 because the web UI virtualizes/lazy-loads the photo grid.
 
-Future enhancement:
+**However**, the order *is* recoverable from the live album via
+browser automation: driving a real scroll through the shared album
+page (`photos.google.com/share/...`) forces each photo tile to render,
+and each tile's accessibility label (`aria-label="Photo - Landscape -
+Aug 4, 2017, 9:26:32 PM"`) exposes an exact timestamp. Collecting
+these in DOM order and correlating them against `photos.json`'s
+`photoTakenTime` values (after calibrating a timezone offset, since
+the displayed time isn't UTC) recovered 255/287 (89%) of one real
+album's true positions directly; the rest were interpolated by
+timestamp among the recovered ones rather than dumped at the end. This
+is a one-off manual process (done interactively via `claude-in-chrome`
+against Google's undocumented internal DOM structure, not a repeatable
+CLI feature) — it would need redoing, and re-verifying against the
+live DOM, for each album.
 
--   Optional manual ordering file — given the above, this is the
-    realistic path for albums with a deliberate (non-chronological)
-    curated sequence: let the user specify explicit positions for the
-    handful of photos where automatic sort gets it wrong, rather than
-    trying to solve full order recovery.
+Implemented as `ordering.order_photos(photos, manual_order=...)` and
+`photobook proof --manual-order <file.json>`: `manual_order` is a list
+of `image_path` strings in the recovered/desired sequence; photos not
+listed are interpolated by timestamp among the ones that are, and
+undated+unlisted photos go last.
 
 ------------------------------------------------------------------------
 

@@ -40,3 +40,39 @@ def test_order_photos_appends_unknown_timestamps_at_the_end() -> None:
     ordered = order_photos([undated_a, dated, undated_b])
 
     assert [p.image_path.name for p in ordered] == ["dated.jpg", "undated_a.jpg", "undated_b.jpg"]
+
+
+def test_manual_order_overrides_timestamp_order_for_matched_photos() -> None:
+    a = _make_photo("a.jpg", datetime(2020, 1, 1, tzinfo=UTC))
+    b = _make_photo("b.jpg", datetime(2020, 2, 1, tzinfo=UTC))
+    c = _make_photo("c.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+
+    # Deliberately non-chronological, like a manually curated album sequence.
+    manual_order = ["/album/c.jpg", "/album/a.jpg", "/album/b.jpg"]
+    ordered = order_photos([a, b, c], manual_order=manual_order)
+
+    assert [p.image_path.name for p in ordered] == ["c.jpg", "a.jpg", "b.jpg"]
+
+
+def test_manual_order_interpolates_unlisted_photos_by_timestamp() -> None:
+    jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
+    mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+    may = _make_photo("may.jpg", datetime(2020, 5, 1, tzinfo=UTC))
+    # Not in manual_order; timestamp falls between jan and mar.
+    feb = _make_photo("feb.jpg", datetime(2020, 2, 1, tzinfo=UTC))
+
+    manual_order = ["/album/jan.jpg", "/album/mar.jpg", "/album/may.jpg"]
+    ordered = order_photos([may, feb, jan, mar], manual_order=manual_order)
+
+    assert [p.image_path.name for p in ordered] == ["jan.jpg", "feb.jpg", "mar.jpg", "may.jpg"]
+
+
+def test_manual_order_appends_undated_unlisted_photos_at_the_end() -> None:
+    jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
+    mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+    mystery = _make_photo("mystery.jpg", None)
+
+    manual_order = ["/album/mar.jpg", "/album/jan.jpg"]
+    ordered = order_photos([mystery, jan, mar], manual_order=manual_order)
+
+    assert [p.image_path.name for p in ordered] == ["mar.jpg", "jan.jpg", "mystery.jpg"]
