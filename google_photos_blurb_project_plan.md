@@ -86,9 +86,9 @@ google-photo-book/
       render.py              # Jinja2 + WeasyPrint rendering
       proof.py                # proof PDF generation
       frontmatter.py           # title/copyright/TOC/chapter pages
-  templates/
-    book.html.jinja
-    proof.html.jinja
+      templates/                # inside the package (not repo root), so
+        proof.html.jinja        # FileSystemLoader finds them regardless
+        book.html.jinja         # of install location
   tests/
     fixtures/
       sample_takeout/          # tiny synthetic Takeout export, checked in
@@ -183,10 +183,40 @@ Fallbacks:
 
 -   `creationTime`
 -   EXIF
+-   Unknown: appended at the end, in scan order (implemented in
+    `ordering.py` as Milestone 2's stopgap; see caveat below).
 
-Future enhancement:
+Verified (2026-08-02) that Google Photos' custom manual album
+ordering — dragging photos into a deliberate sequence in the album UI,
+distinct from chronological order — is **not recoverable from a
+Takeout export itself**: the per-photo JSON has no position field, and
+the album-level `metadata.json` contains only `{"title": ...}`. The
+Photos Library API's read scope was locked down in March 2025 to
+app-created content only, so it can no longer read an existing
+album's order either. No community tool (e.g. GooglePhotosTakeoutHelper)
+has solved this. Saving the album page as HTML only captures a subset
+because the web UI virtualizes/lazy-loads the photo grid.
 
--   Optional manual ordering file.
+**However**, the order *is* recoverable from the live album via
+browser automation: driving a real scroll through the shared album
+page (`photos.google.com/share/...`) forces each photo tile to render,
+and each tile's accessibility label (`aria-label="Photo - Landscape -
+Aug 4, 2017, 9:26:32 PM"`) exposes an exact timestamp. Collecting
+these in DOM order and correlating them against `photos.json`'s
+`photoTakenTime` values (after calibrating a timezone offset, since
+the displayed time isn't UTC) recovered 255/287 (89%) of one real
+album's true positions directly; the rest were interpolated by
+timestamp among the recovered ones rather than dumped at the end. This
+is a one-off manual process (done interactively via `claude-in-chrome`
+against Google's undocumented internal DOM structure, not a repeatable
+CLI feature) — it would need redoing, and re-verifying against the
+live DOM, for each album.
+
+Implemented as `ordering.order_photos(photos, manual_order=...)` and
+`photobook proof --manual-order <file.json>`: `manual_order` is a list
+of `image_path` strings in the recovered/desired sequence; photos not
+listed are interpolated by timestamp among the ones that are, and
+undated+unlisted photos go last.
 
 ------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -37,3 +38,24 @@ def photo_to_dict(photo: Photo) -> dict:
         "edited": photo.edited,
         "warnings": list(photo.warnings),
     }
+
+
+def dict_to_photo(data: dict) -> Photo:
+    return Photo(
+        image_path=Path(data["image_path"]),
+        metadata_path=Path(data["metadata_path"]) if data.get("metadata_path") else None,
+        timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else None,
+        timestamp_source=data["timestamp_source"],
+        caption=data.get("caption"),
+        google_photos_url=data.get("google_photos_url"),
+        width=data["width"],
+        height=data["height"],
+        orientation=data["orientation"],
+        edited=data["edited"],
+        warnings=list(data.get("warnings", [])),
+    )
+
+
+def load_photos(path: Path) -> list[Photo]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [dict_to_photo(item) for item in data]
