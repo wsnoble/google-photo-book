@@ -196,9 +196,13 @@ def _read_exif_timestamp(image_path: Path) -> datetime | None:
 
     if not raw:
         return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("ascii", errors="ignore")
     try:
-        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S")
-    except ValueError:
+        # EXIF has no timezone field; treat it as UTC (best-effort) so it stays
+        # comparable with the timezone-aware timestamps from Takeout's JSON.
+        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=UTC)
+    except (TypeError, ValueError):
         return None
 
 

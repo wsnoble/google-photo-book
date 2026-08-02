@@ -13,7 +13,7 @@ app = typer.Typer(help="Build a Blurb-ready photo book from a Google Takeout alb
 
 @app.callback()
 def callback() -> None:
-    """photobook: convert a Google Takeout album export into a Blurb-ready PDF."""
+    """photobook: command-line tools for the Google Takeout -> Blurb photo book pipeline."""
 
 
 @app.command()
