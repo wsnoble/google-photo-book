@@ -13,12 +13,13 @@ def order_photos(photos: list[Photo], manual_order: list[str] | None = None) -> 
     With `manual_order` (a list of `image_path` strings, e.g. recovered
     from the source album's actual display order), photos matching an
     entry keep that order. Photos not in `manual_order` are appended at
-    the end, sorted by timestamp among themselves. This deliberately does
-    *not* try to guess an insertion point from a nearby timestamp: a
-    manually-curated album order is not chronologically local (a photo
-    can sit next to ones taken months apart), so "insert next to the
-    closest timestamp" produces confidently wrong placements rather than
-    an honest "position unknown."
+    the end: dated ones sorted by timestamp among themselves, then
+    undated ones last of all. This deliberately does *not* try to guess
+    an insertion point from a nearby timestamp: a manually-curated album
+    order is not chronologically local (a photo can sit next to ones
+    taken months apart), so "insert next to the closest timestamp"
+    produces confidently wrong placements rather than an honest
+    "position unknown."
     """
     if manual_order is not None:
         return _order_with_manual_override(photos, manual_order)
