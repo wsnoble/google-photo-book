@@ -79,7 +79,8 @@ def proof(
             exists=True,
             dir_okay=False,
             help="Optional JSON file listing image_path strings in a manually-specified "
-            "order; photos not listed are interpolated by timestamp among the ones that are.",
+            "order; photos not listed are appended at the end (dated ones sorted by "
+            "timestamp, undated ones last of all).",
         ),
     ] = None,
 ) -> None:
