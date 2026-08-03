@@ -54,25 +54,45 @@ def test_manual_order_overrides_timestamp_order_for_matched_photos() -> None:
     assert [p.image_path.name for p in ordered] == ["c.jpg", "a.jpg", "b.jpg"]
 
 
-def test_manual_order_interpolates_unlisted_photos_by_timestamp() -> None:
+def test_manual_order_appends_unlisted_photos_at_the_end_sorted_by_timestamp() -> None:
+    # A manually-curated album order is not chronologically local (this
+    # sequence deliberately jumps Nov -> Feb -> Jun), so a photo missing
+    # from manual_order must NOT be guessed into a slot next to whichever
+    # placed photo happens to have the closest timestamp — that produced a
+    # confidently wrong position in practice. It goes to the end instead,
+    # sorted among the other unlisted photos, as an honest "unknown."
+    nov = _make_photo("nov.jpg", datetime(2017, 11, 1, tzinfo=UTC))
+    feb = _make_photo("feb.jpg", datetime(2017, 2, 1, tzinfo=UTC))
+    jun = _make_photo("jun.jpg", datetime(2017, 6, 1, tzinfo=UTC))
+    # Not in manual_order. Chronologically nearest to feb, but must still
+    # land at the end, not interpolated next to feb.
+    mar = _make_photo("mar.jpg", datetime(2017, 3, 1, tzinfo=UTC))
+    aug = _make_photo("aug.jpg", datetime(2017, 8, 1, tzinfo=UTC))
+
+    manual_order = ["/album/nov.jpg", "/album/feb.jpg", "/album/jun.jpg"]
+    ordered = order_photos([aug, jun, mar, nov, feb], manual_order=manual_order)
+
+    assert [p.image_path.name for p in ordered] == [
+        "nov.jpg",
+        "feb.jpg",
+        "jun.jpg",
+        "mar.jpg",
+        "aug.jpg",
+    ]
+
+
+def test_manual_order_appends_undated_unlisted_photos_last_of_all() -> None:
     jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
     mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
-    may = _make_photo("may.jpg", datetime(2020, 5, 1, tzinfo=UTC))
-    # Not in manual_order; timestamp falls between jan and mar.
-    feb = _make_photo("feb.jpg", datetime(2020, 2, 1, tzinfo=UTC))
-
-    manual_order = ["/album/jan.jpg", "/album/mar.jpg", "/album/may.jpg"]
-    ordered = order_photos([may, feb, jan, mar], manual_order=manual_order)
-
-    assert [p.image_path.name for p in ordered] == ["jan.jpg", "feb.jpg", "mar.jpg", "may.jpg"]
-
-
-def test_manual_order_appends_undated_unlisted_photos_at_the_end() -> None:
-    jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
-    mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+    dated_leftover = _make_photo("dated_leftover.jpg", datetime(2020, 2, 1, tzinfo=UTC))
     mystery = _make_photo("mystery.jpg", None)
 
     manual_order = ["/album/mar.jpg", "/album/jan.jpg"]
-    ordered = order_photos([mystery, jan, mar], manual_order=manual_order)
+    ordered = order_photos([mystery, jan, dated_leftover, mar], manual_order=manual_order)
 
-    assert [p.image_path.name for p in ordered] == ["mar.jpg", "jan.jpg", "mystery.jpg"]
+    assert [p.image_path.name for p in ordered] == [
+        "mar.jpg",
+        "jan.jpg",
+        "dated_leftover.jpg",
+        "mystery.jpg",
+    ]

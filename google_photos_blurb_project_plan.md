@@ -205,18 +205,37 @@ Aug 4, 2017, 9:26:32 PM"`) exposes an exact timestamp. Collecting
 these in DOM order and correlating them against `photos.json`'s
 `photoTakenTime` values (after calibrating a timezone offset, since
 the displayed time isn't UTC) recovered 255/287 (89%) of one real
-album's true positions directly; the rest were interpolated by
-timestamp among the recovered ones rather than dumped at the end. This
-is a one-off manual process (done interactively via `claude-in-chrome`
-against Google's undocumented internal DOM structure, not a repeatable
-CLI feature) — it would need redoing, and re-verifying against the
-live DOM, for each album.
+album's true positions directly. This is a one-off manual process
+(done interactively via `claude-in-chrome` against Google's
+undocumented internal DOM structure, not a repeatable CLI feature) —
+it would need redoing, and re-verifying against the live DOM, for
+each album.
+
+The remaining 32/287 (11%) had no timestamp match at all — most
+likely their own `photoTakenTime` is simply inaccurate (a known issue
+with old/edited photos), so no calibrated offset lines them up with
+any candidate position. **First attempt interpolated these by
+inserting each one next to whichever recovered photo had the closest
+timestamp — this was wrong** and shipped a real ordering bug (verified
+against the user's own review of the proof PDF: a photo the user
+confirmed was #3 in the live album showed as #4, displaced by an
+unrelated photo wrongly inserted at #3). The bug: the recovered
+sequence is in *manual* album order, not sorted by time, so `bisect`
+over it is invalid — silently produces an arbitrary position rather
+than an error. Root cause is deeper than the implementation bug,
+though: even a *correct* nearest-timestamp-neighbor insertion assumes
+local chronological continuity, which a manually-curated,
+non-chronological album explicitly violates (confirmed empirically:
+fixing the bisect bug with correct nearest-neighbor logic still placed
+the same photo wrong, because its own timestamp really is closest to
+the wrong neighborhood). Timestamp proximity cannot honestly stand in
+for a missing position here.
 
 Implemented as `ordering.order_photos(photos, manual_order=...)` and
 `photobook proof --manual-order <file.json>`: `manual_order` is a list
 of `image_path` strings in the recovered/desired sequence; photos not
-listed are interpolated by timestamp among the ones that are, and
-undated+unlisted photos go last.
+listed are appended at the end, sorted by timestamp among themselves —
+an honest "position unknown," not a guessed one.
 
 ------------------------------------------------------------------------
 

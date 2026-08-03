@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bisect import bisect_left
-
 from photobook.model import Photo
 
 
@@ -14,10 +12,13 @@ def order_photos(photos: list[Photo], manual_order: list[str] | None = None) -> 
 
     With `manual_order` (a list of `image_path` strings, e.g. recovered
     from the source album's actual display order), photos matching an
-    entry keep that order. Photos not in `manual_order` are interpolated
-    by timestamp among the matched photos' timestamps, so a handful of
-    missing entries don't get dumped out of context at the end; photos
-    with neither a manual-order entry nor a timestamp go last.
+    entry keep that order. Photos not in `manual_order` are appended at
+    the end, sorted by timestamp among themselves. This deliberately does
+    *not* try to guess an insertion point from a nearby timestamp: a
+    manually-curated album order is not chronologically local (a photo
+    can sit next to ones taken months apart), so "insert next to the
+    closest timestamp" produces confidently wrong placements rather than
+    an honest "position unknown."
     """
     if manual_order is not None:
         return _order_with_manual_override(photos, manual_order)
@@ -31,7 +32,8 @@ def _order_with_manual_override(photos: list[Photo], manual_order: list[str]) ->
     by_path = {str(photo.image_path): photo for photo in photos}
     matched_paths = [path for path in manual_order if path in by_path]
     matched = [by_path[path] for path in matched_paths]
-    leftover = [photo for photo in photos if str(photo.image_path) not in set(matched_paths)]
+    matched_set = set(matched_paths)
+    leftover = [photo for photo in photos if str(photo.image_path) not in matched_set]
 
     dated_leftover = sorted(
         (photo for photo in leftover if photo.timestamp is not None),
@@ -39,12 +41,4 @@ def _order_with_manual_override(photos: list[Photo], manual_order: list[str]) ->
     )
     undated_leftover = [photo for photo in leftover if photo.timestamp is None]
 
-    result = list(matched)
-    timestamps = [photo.timestamp for photo in matched]
-    for photo in dated_leftover:
-        index = bisect_left(timestamps, photo.timestamp)
-        result.insert(index, photo)
-        timestamps.insert(index, photo.timestamp)
-
-    result.extend(undated_leftover)
-    return result
+    return matched + dated_leftover + undated_leftover
