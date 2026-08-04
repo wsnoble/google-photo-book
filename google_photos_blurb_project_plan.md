@@ -454,6 +454,25 @@ Professional layout engine
 
 Generate attractive pages using HTML templates.
 
+Implemented as `classify.py` (portrait/landscape/square/panorama, EXIF
+orientation-aware), `layout.py` (landscape/panorama/square one per
+page, consecutive portraits paired two-per-page), and `render.py`
+(`photobook build`). Hero images and typography polish are Milestone
+5, not here.
+
+Hit a real WeasyPrint rendering bug building the two-portrait-per-page
+layout against the real album: giving `flex: 1` directly to an `<img>`
+with `object-fit: contain` collapses/overlaps columns once the image's
+intrinsic size is large (i.e. real photos, not small test fixtures —
+the unit tests' 800x600 fixtures didn't trigger it). Fix: put
+`flex: 1` on a plain wrapper div instead, and constrain the `<img>`
+with `max-width`/`max-height` rather than `object-fit`. Verified
+against the real 287-photo album by rendering PDF pages to PNG
+(`pdftoppm`) and inspecting them directly, since the generated PDF
+(~360MB, full-resolution images) exceeds tooling limits for direct
+inspection. That file size is expected for now and is a Milestone 4
+concern (downsampling to Blurb's ~300 PPI target).
+
 ## Milestone 4
 
 Blurb-ready PDF
