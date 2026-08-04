@@ -73,6 +73,12 @@ def build_book_pdf(
 
 
 def _page_to_template_data(page: Page) -> dict:
+    if sum(page.rows) != len(page.slots):
+        raise ValueError(
+            f"Page.rows {page.rows} (sum={sum(page.rows)}) doesn't match "
+            f"its slot count ({len(page.slots)}) -- would silently drop photos."
+        )
+
     slot_dicts = [
         {"image_uri": slot.photo.image_path.resolve().as_uri(), "caption": slot.photo.caption}
         for slot in page.slots

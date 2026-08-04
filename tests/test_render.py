@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from pypdf import PdfReader
 
+from photobook.layout import Page, PageSlot
 from photobook.model import Photo
-from photobook.render import build_book_pdf
+from photobook.render import _page_to_template_data, build_book_pdf
 
 
 def _make_photo(tmp_path: Path, name: str, width: int, height: int, **overrides) -> Photo:
@@ -100,3 +102,13 @@ def test_caption_with_markup_is_escaped_not_interpreted(tmp_path: Path) -> None:
 
     text = "".join(page.extract_text() for page in PdfReader(str(output)).pages)
     assert "<b>bold</b> caption" in text
+
+
+def test_page_to_template_data_rejects_rows_that_dont_match_slot_count(tmp_path: Path) -> None:
+    photo = _landscape(tmp_path, "a.jpg")
+    # rows sums to 3, but there's only 1 slot -- would otherwise silently
+    # produce empty/wrong rows instead of failing loudly.
+    mismatched_page = Page(slots=[PageSlot(photo=photo, orientation="landscape")], rows=[3])
+
+    with pytest.raises(ValueError, match="doesn't match"):
+        _page_to_template_data(mismatched_page)

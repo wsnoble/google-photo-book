@@ -41,25 +41,30 @@ def build_pages(photos: list[Photo]) -> list[Page]:
     def current_target() -> int:
         return _PAGE_SIZE_PATTERN[pattern_index % len(_PAGE_SIZE_PATTERN)]
 
-    def flush_batch() -> None:
+    def flush_batch(*, advance_pattern: bool) -> None:
         nonlocal batch, pattern_index
         if batch:
             pages.append(_make_page(batch))
             batch = []
-            pattern_index += 1
+            if advance_pattern:
+                pattern_index += 1
 
     for photo in photos:
         orientation = classify_photo(photo)
         if orientation == "panorama":
-            flush_batch()
+            # A panorama forces flushing whatever's pending, but that
+            # flush is incomplete (didn't reach current_target()) -- it
+            # must not consume a pattern slot, or a panorama would shift
+            # the 5/4/5/4/2 cadence for every page that follows it.
+            flush_batch(advance_pattern=False)
             pages.append(_make_page([PageSlot(photo, orientation)]))
             continue
 
         batch.append(PageSlot(photo, orientation))
         if len(batch) >= current_target():
-            flush_batch()
+            flush_batch(advance_pattern=True)
 
-    flush_batch()
+    flush_batch(advance_pattern=False)
     return pages
 
 

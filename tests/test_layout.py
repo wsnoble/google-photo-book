@@ -70,6 +70,22 @@ def test_panorama_gets_its_own_page_without_disrupting_the_pattern() -> None:
     assert pages[1].slots[0].orientation == "panorama"
 
 
+def test_panorama_forced_flush_does_not_shift_the_pattern_index() -> None:
+    # Regression test: flush_batch() used to always advance the pattern
+    # index, even for an incomplete batch forced out by a panorama. That
+    # shifted _PAGE_SIZE_PATTERN for every page after the panorama instead
+    # of leaving the cadence untouched.
+    photos = [_landscape("pre.jpg"), _panorama("wide.jpg")] + [
+        _landscape(f"p{i}.jpg") for i in range(20)
+    ]
+    pages = build_pages(photos)
+    sizes = [len(page.slots) for page in pages]
+    # "pre.jpg" is forced out alone (doesn't reach the target of 5), then
+    # the panorama's own page, then the full pattern starts fresh at 5 --
+    # not offset by the earlier incomplete flush.
+    assert sizes == [1, 1, 5, 4, 5, 4, 2]
+
+
 def test_solo_page_has_a_single_row() -> None:
     pages = build_pages([_panorama("wide.jpg")])
     assert pages[0].rows == [1]

@@ -41,11 +41,14 @@
   .page.solo .cell {
     padding: 0.3in;
   }
-  /* The image is deliberately NOT a flex item with object-fit: WeasyPrint
-     mis-sizes flex items containing very-large-intrinsic-size images
-     (overlapping/collapsed columns). Giving flex-grow to a plain wrapper
-     div instead, and sizing the img to fill it explicitly, is the
-     reliable pattern. */
+  /* WeasyPrint mis-sizes (overlapping/collapsing columns) an <img> that
+     has flex-grow (e.g. `flex: 1`) directly on it once its intrinsic
+     size is large (real photos, not small test fixtures). The fix is
+     giving flex-grow to this wrapper div instead and sizing the <img>
+     with explicit width/height (100%, below) rather than flex-grow --
+     object-fit on the <img> itself is fine either way. Do not add
+     `flex: 1` (or similar) to `.image-box img` without re-verifying
+     against real, large images. */
   .image-box {
     flex: 1;
     min-height: 0;
