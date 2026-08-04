@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ book_title }}</title>
+<style>
+  @page {
+    size: {{ page_width }} {{ page_height }};
+    margin: 0;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  .page {
+    width: {{ page_width }};
+    height: {{ page_height }};
+    display: flex;
+    break-after: page;
+    background: white;
+  }
+  .page:last-child {
+    break-after: auto;
+  }
+  .slot {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0.3in;
+  }
+  /* The image is deliberately NOT a flex item with object-fit: WeasyPrint
+     mis-sizes flex items containing very-large-intrinsic-size images
+     (overlapping/collapsed columns). Giving flex-grow to a plain wrapper
+     div instead, and constraining the img with max-width/max-height, is
+     the reliable pattern across renderers. */
+  .image-box {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .image-box img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+  }
+  .caption {
+    margin-top: 0.15in;
+    text-align: center;
+    font-size: 11pt;
+    font-style: italic;
+    color: #222;
+  }
+</style>
+</head>
+<body>
+{% for page in pages %}
+<div class="page">
+  {% for slot in page.slots %}
+  <div class="slot">
+    <div class="image-box">
+      <img src="{{ slot.image_uri }}" alt="">
+    </div>
+    {% if slot.caption %}
+    <div class="caption">{{ slot.caption }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+</body>
+</html>

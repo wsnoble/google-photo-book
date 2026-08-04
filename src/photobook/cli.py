@@ -108,6 +108,66 @@ def proof(
     typer.echo(f"Wrote proof PDF with {len(photos)} photos to {output}")
 
 
+@app.command()
+def build(
+    photos_json: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, dir_okay=False, help="Path to the photos.json produced by `import`."
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path to write the book PDF to."),
+    ] = Path("build/book.pdf"),
+    config_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--config", "-c", exists=True, dir_okay=False, help="Optional YAML config file."
+        ),
+    ] = None,
+    manual_order: Annotated[
+        Path | None,
+        typer.Option(
+            "--manual-order",
+            exists=True,
+            dir_okay=False,
+            help="Optional JSON file listing image_path strings in a manually-specified "
+            "order; photos not listed are appended at the end (dated ones sorted by "
+            "timestamp, undated ones last of all).",
+        ),
+    ] = None,
+    guess_leftover_positions: Annotated[
+        bool,
+        typer.Option(
+            "--guess-leftover-positions",
+            help="With --manual-order, insert leftover (unlisted) photos next to their "
+            "chronologically closest neighbor instead of appending them at the end. "
+            "This is a best-effort guess, not a recovered fact — check the result visually.",
+        ),
+    ] = False,
+) -> None:
+    """Render the photo book: landscape/panorama/square one per page, portraits
+    paired two-per-page, captions below when present. Page size/bleed are
+    provisional pending the Blurb spec lookup (Milestone 4).
+    """
+    # Imported lazily: this pulls in WeasyPrint, which needs system libraries
+    # (pango) not required by the other commands.
+    from photobook.render import build_book_pdf
+
+    config = load_config(config_path)
+    photos = load_photos(photos_json)
+    order = json.loads(manual_order.read_text(encoding="utf-8")) if manual_order else None
+    build_book_pdf(
+        photos,
+        output,
+        book_title=config.book.title,
+        manual_order=order,
+        guess_leftover_positions=guess_leftover_positions,
+    )
+    typer.echo(f"Wrote book PDF with {len(photos)} photos to {output}")
+
+
 def main() -> None:
     app()
 
