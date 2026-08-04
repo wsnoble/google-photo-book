@@ -34,13 +34,19 @@ _THUMBNAIL_JPEG_QUALITY = 60
 
 
 def build_proof_pdf(
-    photos: list[Photo], output_path: Path, *, manual_order: list[str] | None = None
+    photos: list[Photo],
+    output_path: Path,
+    *,
+    manual_order: list[str] | None = None,
+    guess_leftover_positions: bool = False,
 ) -> None:
     """Render a compact PDF listing every photo, in book order, with its
     filename, date, caption, and any warnings, for verifying the import
     before building the real layout.
     """
-    ordered = order_photos(photos, manual_order=manual_order)
+    ordered = order_photos(
+        photos, manual_order=manual_order, guess_leftover_positions=guess_leftover_positions
+    )
     entries = [
         {
             "index": index,

@@ -96,3 +96,53 @@ def test_manual_order_appends_undated_unlisted_photos_last_of_all() -> None:
         "dated_leftover.jpg",
         "mystery.jpg",
     ]
+
+
+def test_guess_leftover_positions_inserts_next_to_nearest_timestamp() -> None:
+    jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
+    mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+    may = _make_photo("may.jpg", datetime(2020, 5, 1, tzinfo=UTC))
+    # Not in manual_order; chronologically closest to mar (28 days away),
+    # not jan (31 days) or may (61 days).
+    feb = _make_photo("feb.jpg", datetime(2020, 2, 2, tzinfo=UTC))
+
+    manual_order = ["/album/jan.jpg", "/album/mar.jpg", "/album/may.jpg"]
+    ordered = order_photos(
+        [may, feb, jan, mar], manual_order=manual_order, guess_leftover_positions=True
+    )
+
+    assert [p.image_path.name for p in ordered] == ["jan.jpg", "feb.jpg", "mar.jpg", "may.jpg"]
+
+
+def test_guess_leftover_positions_still_appends_undated_leftovers_last() -> None:
+    jan = _make_photo("jan.jpg", datetime(2020, 1, 1, tzinfo=UTC))
+    mar = _make_photo("mar.jpg", datetime(2020, 3, 1, tzinfo=UTC))
+    mystery = _make_photo("mystery.jpg", None)
+
+    manual_order = ["/album/jan.jpg", "/album/mar.jpg"]
+    ordered = order_photos(
+        [mystery, jan, mar], manual_order=manual_order, guess_leftover_positions=True
+    )
+
+    assert [p.image_path.name for p in ordered] == ["jan.jpg", "mar.jpg", "mystery.jpg"]
+
+
+def test_guess_leftover_positions_can_place_photo_far_from_true_position() -> None:
+    # Regression/documentation test: this is the exact failure mode found
+    # in production. The manual order is not chronologically local (jumps
+    # Nov -> Feb -> Jun), so even *correct* nearest-neighbor insertion
+    # confidently places `mar` next to `feb` — which is wrong if `mar`'s
+    # true manually-curated position was actually much later in the
+    # sequence. This test documents that `guess_leftover_positions=True`
+    # is a real trade-off, not a free upgrade over the default.
+    nov = _make_photo("nov.jpg", datetime(2017, 11, 1, tzinfo=UTC))
+    feb = _make_photo("feb.jpg", datetime(2017, 2, 1, tzinfo=UTC))
+    jun = _make_photo("jun.jpg", datetime(2017, 6, 1, tzinfo=UTC))
+    mar = _make_photo("mar.jpg", datetime(2017, 3, 1, tzinfo=UTC))
+
+    manual_order = ["/album/nov.jpg", "/album/feb.jpg", "/album/jun.jpg"]
+    ordered = order_photos(
+        [jun, mar, nov, feb], manual_order=manual_order, guess_leftover_positions=True
+    )
+
+    assert [p.image_path.name for p in ordered] == ["nov.jpg", "feb.jpg", "mar.jpg", "jun.jpg"]

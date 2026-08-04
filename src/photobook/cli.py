@@ -83,6 +83,17 @@ def proof(
             "timestamp, undated ones last of all).",
         ),
     ] = None,
+    guess_leftover_positions: Annotated[
+        bool,
+        typer.Option(
+            "--guess-leftover-positions",
+            help="With --manual-order, insert leftover (unlisted) photos next to their "
+            "chronologically closest neighbor instead of appending them at the end. "
+            "This is a best-effort guess, not a recovered fact, and can place a photo "
+            "confidently in the wrong spot for a non-chronological manual order — "
+            "check the result visually.",
+        ),
+    ] = False,
 ) -> None:
     """Render a compact proof PDF (photo, filename, date, caption, warnings) for review."""
     # Imported lazily: this pulls in WeasyPrint, which needs system libraries
@@ -91,7 +102,9 @@ def proof(
 
     photos = load_photos(photos_json)
     order = json.loads(manual_order.read_text(encoding="utf-8")) if manual_order else None
-    build_proof_pdf(photos, output, manual_order=order)
+    build_proof_pdf(
+        photos, output, manual_order=order, guess_leftover_positions=guess_leftover_positions
+    )
     typer.echo(f"Wrote proof PDF with {len(photos)} photos to {output}")
 
 
