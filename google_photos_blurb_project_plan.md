@@ -271,14 +271,28 @@ before final build, since Blurb determines exact page size, bleed, and
 safety margin per size/paper/cover combination rather than a fixed
 constant — see [Milestone 4](#milestone-4)).
 
-Layout rules:
+Layout rules (revised 2026-08-03 after reviewing Milestone 3's initial
+one/two-per-page output — the user wanted denser, more varied pages):
 
--   Large landscape images: one per page.
--   Portraits: two per page when appropriate.
--   Panoramas: full-width.
--   Hero images: full-page.
--   Captions below photos.
--   No reserved caption space when caption absent.
+-   Panoramas: full page, full frame (uncropped) — cropping a wide
+    panorama into a small grid cell would lose most of the image.
+-   Everything else: grouped into grid pages sized from a repeating
+    pattern, mostly 4-5 photos per page, occasionally 2 for visual
+    rhythm (`_PAGE_SIZE_PATTERN = (5, 4, 5, 4, 2)` in `layout.py`;
+    change that tuple to adjust the mix). Grid photos are **cropped to
+    fill** their cell uniformly (`object-fit: cover`), arranged into
+    rows of up to 3 columns (5 → 3+2, 4 → 2+2, 2 → a single row).
+-   Hero images: full-page (Milestone 5, not yet implemented).
+-   Captions below photos when present, no reserved space when
+    absent — full-size caption (11pt) on solo/panorama pages, small
+    caption (7pt) on grid pages since there's much less room per photo.
+
+Automatic image classification (unchanged):
+
+-   Portrait
+-   Landscape
+-   Square
+-   Panorama
 
 Automatic image classification:
 
@@ -455,10 +469,14 @@ Professional layout engine
 Generate attractive pages using HTML templates.
 
 Implemented as `classify.py` (portrait/landscape/square/panorama, EXIF
-orientation-aware), `layout.py` (landscape/panorama/square one per
-page, consecutive portraits paired two-per-page), and `render.py`
-(`photobook build`). Hero images and typography polish are Milestone
-5, not here.
+orientation-aware), `layout.py`, and `render.py` (`photobook build`).
+Hero images and typography polish are Milestone 5, not here.
+
+Initial version used one photo per page (two for paired portraits).
+After reviewing that output, the user asked for denser, more varied
+pages instead — see the revised Layout rules under
+[Layout Engine](#6-layout-engine) above (grid pages of mostly 4-5,
+cropped to fill; panoramas still solo/uncropped).
 
 Hit a real WeasyPrint rendering bug building the two-portrait-per-page
 layout against the real album: giving `flex: 1` directly to an `<img>`

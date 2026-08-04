@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from photobook.classify import Orientation, classify_photo
 from photobook.model import Photo
+
+# Cycle of grid-page sizes: mostly 4-5 photos per page, occasionally 2, for
+# visual variety (roughly 1 in 5 pages is a pair). Adjust this tuple to
+# change the mix.
+_PAGE_SIZE_PATTERN = (5, 4, 5, 4, 2)
+_MAX_ROW_COLUMNS = 3
 
 
 @dataclass
@@ -15,39 +22,56 @@ class PageSlot:
 @dataclass
 class Page:
     slots: list[PageSlot]
+    rows: list[int]  # slot count per row, e.g. [3, 2] for a 5-photo page
 
 
 def build_pages(photos: list[Photo]) -> list[Page]:
     """Lay out photos (already in book order) into pages.
 
-    -   Landscape, panorama, and square photos: one per page.
-    -   Portraits: paired two-per-page with the next portrait in sequence;
-        an odd one out (no portrait immediately follows) gets its own page
-        rather than waiting arbitrarily far ahead for a pairing partner,
-        so pairing never reorders photos.
+    Panoramas get their own full page, shown at full frame (uncropped) --
+    cropping one into a small grid cell would lose most of the image.
+    Everything else is grouped into grid pages sized from a repeating
+    pattern that's mostly 4-5 photos, occasionally 2, arranged into rows
+    of up to 3 columns.
     """
     pages: list[Page] = []
-    pending_portrait: PageSlot | None = None
+    batch: list[PageSlot] = []
+    pattern_index = 0
 
-    def flush_pending() -> None:
-        nonlocal pending_portrait
-        if pending_portrait is not None:
-            pages.append(Page(slots=[pending_portrait]))
-            pending_portrait = None
+    def current_target() -> int:
+        return _PAGE_SIZE_PATTERN[pattern_index % len(_PAGE_SIZE_PATTERN)]
+
+    def flush_batch() -> None:
+        nonlocal batch, pattern_index
+        if batch:
+            pages.append(_make_page(batch))
+            batch = []
+            pattern_index += 1
 
     for photo in photos:
         orientation = classify_photo(photo)
-        slot = PageSlot(photo=photo, orientation=orientation)
+        if orientation == "panorama":
+            flush_batch()
+            pages.append(_make_page([PageSlot(photo, orientation)]))
+            continue
 
-        if orientation == "portrait":
-            if pending_portrait is None:
-                pending_portrait = slot
-            else:
-                pages.append(Page(slots=[pending_portrait, slot]))
-                pending_portrait = None
-        else:
-            flush_pending()
-            pages.append(Page(slots=[slot]))
+        batch.append(PageSlot(photo, orientation))
+        if len(batch) >= current_target():
+            flush_batch()
 
-    flush_pending()
+    flush_batch()
     return pages
+
+
+def _make_page(slots: list[PageSlot]) -> Page:
+    return Page(slots=slots, rows=_split_into_rows(len(slots)))
+
+
+def _split_into_rows(n: int, max_columns: int = _MAX_ROW_COLUMNS) -> list[int]:
+    """Split n slots into rows of at most max_columns, as evenly sized as
+    possible (5 -> [3, 2], 4 -> [2, 2], 7 -> [3, 2, 2])."""
+    if n <= max_columns:
+        return [n] if n > 0 else []
+    row_count = math.ceil(n / max_columns)
+    base, remainder = divmod(n, row_count)
+    return [base + 1 if i < remainder else base for i in range(row_count)]

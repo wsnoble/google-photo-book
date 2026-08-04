@@ -19,7 +19,7 @@ if platform.system() == "Darwin":
 
 from weasyprint import HTML  # noqa: E402
 
-from photobook.layout import build_pages
+from photobook.layout import Page, build_pages
 from photobook.model import Photo
 from photobook.ordering import order_photos
 
@@ -43,27 +43,17 @@ def build_book_pdf(
     manual_order: list[str] | None = None,
     guess_leftover_positions: bool = False,
 ) -> None:
-    """Render the actual photo book: landscape/panorama/square photos one
-    per page, portraits paired two-per-page, captions below photos when
-    present with no reserved space when absent.
+    """Render the actual photo book: panoramas get their own full-frame
+    page; everything else is grouped into grid pages (mostly 4-5 photos,
+    occasionally 2, cropped to fill uniform cells), captions below each
+    photo when present with no reserved space when absent.
     """
     ordered = order_photos(
         photos, manual_order=manual_order, guess_leftover_positions=guess_leftover_positions
     )
     pages = build_pages(ordered)
 
-    page_data = [
-        {
-            "slots": [
-                {
-                    "image_uri": slot.photo.image_path.resolve().as_uri(),
-                    "caption": slot.photo.caption,
-                }
-                for slot in page.slots
-            ]
-        }
-        for page in pages
-    ]
+    page_data = [_page_to_template_data(page) for page in pages]
 
     # `select_autoescape` matches on filename suffix (e.g. ".html"), which
     # our "*.html.jinja" template names never match -- autoescape=True
@@ -80,3 +70,16 @@ def build_book_pdf(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     HTML(string=html).write_pdf(output_path)
+
+
+def _page_to_template_data(page: Page) -> dict:
+    slot_dicts = [
+        {"image_uri": slot.photo.image_path.resolve().as_uri(), "caption": slot.photo.caption}
+        for slot in page.slots
+    ]
+    rows = []
+    index = 0
+    for row_size in page.rows:
+        rows.append(slot_dicts[index : index + row_size])
+        index += row_size
+    return {"rows": rows, "is_grid": len(page.slots) > 1}
