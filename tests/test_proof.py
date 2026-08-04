@@ -92,3 +92,18 @@ def test_proof_pdf_flags_missing_caption_and_warnings(tmp_path: Path) -> None:
     assert "no caption" in text.lower()
     assert "timestamp unknown" in text.lower()
     assert "Unknown date" in text
+
+
+def test_caption_with_markup_is_escaped_not_interpreted(tmp_path: Path) -> None:
+    # Regression test: template filenames ending in ".html.jinja" don't
+    # match select_autoescape's ".html" suffix check, which silently
+    # disabled autoescaping. If a caption's "<b>" were interpreted as a
+    # real tag instead of escaped text, it would vanish from extracted
+    # text (consumed as markup) rather than appearing literally.
+    photos = [_make_photo(tmp_path, "a.jpg", caption="<b>bold</b> caption")]
+    output = tmp_path / "proof.pdf"
+
+    build_proof_pdf(photos, output)
+
+    text = "".join(page.extract_text() for page in PdfReader(str(output)).pages)
+    assert "<b>bold</b> caption" in text

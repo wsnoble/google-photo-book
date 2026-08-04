@@ -13,6 +13,23 @@ from photobook.validation import summarize, write_photos_json, write_report_csv,
 app = typer.Typer(help="Build a Blurb-ready photo book from a Google Takeout album export.")
 
 
+def _load_manual_order(path: Path | None) -> list[str] | None:
+    if path is None:
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter(
+            f"{path} is not valid JSON: {exc}", param_hint="--manual-order"
+        ) from exc
+    if not isinstance(data, list) or not all(isinstance(item, str) for item in data):
+        raise typer.BadParameter(
+            f"{path} must contain a JSON array of strings (image_path values).",
+            param_hint="--manual-order",
+        )
+    return data
+
+
 @app.callback()
 def callback() -> None:
     """photobook: command-line tools for the Google Takeout -> Blurb photo book pipeline."""
@@ -101,7 +118,7 @@ def proof(
     from photobook.proof import build_proof_pdf
 
     photos = load_photos(photos_json)
-    order = json.loads(manual_order.read_text(encoding="utf-8")) if manual_order else None
+    order = _load_manual_order(manual_order)
     build_proof_pdf(
         photos, output, manual_order=order, guess_leftover_positions=guess_leftover_positions
     )
@@ -157,7 +174,7 @@ def build(
 
     config = load_config(config_path)
     photos = load_photos(photos_json)
-    order = json.loads(manual_order.read_text(encoding="utf-8")) if manual_order else None
+    order = _load_manual_order(manual_order)
     build_book_pdf(
         photos,
         output,

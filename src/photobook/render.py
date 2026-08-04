@@ -5,7 +5,7 @@ import platform
 from pathlib import Path
 
 import pillow_heif
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 
 # WeasyPrint loads pango/glib via dlopen, which on Apple Silicon Homebrew
 # installs isn't on the default dynamic-library search path. Fix this before
@@ -65,10 +65,11 @@ def build_book_pdf(
         for page in pages
     ]
 
-    env = Environment(
-        loader=FileSystemLoader(_TEMPLATES_DIR),
-        autoescape=select_autoescape(["html"]),
-    )
+    # `select_autoescape` matches on filename suffix (e.g. ".html"), which
+    # our "*.html.jinja" template names never match -- autoescape=True
+    # unconditionally is what we actually want, since every template here
+    # renders HTML.
+    env = Environment(loader=FileSystemLoader(_TEMPLATES_DIR), autoescape=True)
     template = env.get_template("book.html.jinja")
     html = template.render(
         pages=page_data,

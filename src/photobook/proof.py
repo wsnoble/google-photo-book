@@ -8,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pillow_heif
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageOps
 
 # WeasyPrint loads pango/glib via dlopen, which on Apple Silicon Homebrew
@@ -59,10 +59,11 @@ def build_proof_pdf(
         for index, photo in enumerate(ordered, start=1)
     ]
 
-    env = Environment(
-        loader=FileSystemLoader(_TEMPLATES_DIR),
-        autoescape=select_autoescape(["html"]),
-    )
+    # `select_autoescape` matches on filename suffix (e.g. ".html"), which
+    # our "*.html.jinja" template names never match -- autoescape=True
+    # unconditionally is what we actually want, since every template here
+    # renders HTML.
+    env = Environment(loader=FileSystemLoader(_TEMPLATES_DIR), autoescape=True)
     template = env.get_template("proof.html.jinja")
     html = template.render(
         entries=entries,

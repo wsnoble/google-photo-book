@@ -69,3 +69,18 @@ def test_caption_present_and_absent(tmp_path: Path) -> None:
 
     text = "".join(page.extract_text() for page in PdfReader(str(output)).pages)
     assert "A lovely view" in text
+
+
+def test_caption_with_markup_is_escaped_not_interpreted(tmp_path: Path) -> None:
+    # Regression test: template filenames ending in ".html.jinja" don't
+    # match select_autoescape's ".html" suffix check, which silently
+    # disabled autoescaping. If a caption's "<b>" were interpreted as a
+    # real tag instead of escaped text, it would vanish from extracted
+    # text (consumed as markup) rather than appearing literally.
+    photos = [_make_photo(tmp_path, "a.jpg", 800, 600, caption="<b>bold</b> caption")]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output)
+
+    text = "".join(page.extract_text() for page in PdfReader(str(output)).pages)
+    assert "<b>bold</b> caption" in text
