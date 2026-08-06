@@ -8,7 +8,14 @@ from pypdf import PdfReader
 
 from photobook.layout import Page, PageSlot
 from photobook.model import Photo
-from photobook.render import _page_to_template_data, build_book_pdf
+from photobook.render import (
+    _SAFE_AREA_LEFT_RIGHT_PT,
+    _SAFE_AREA_TOP_BOTTOM_PT,
+    PAGE_HEIGHT_PT,
+    PAGE_WIDTH_PT,
+    _page_to_template_data,
+    build_book_pdf,
+)
 
 
 def _make_photo(tmp_path: Path, name: str, width: int, height: int, **overrides) -> Photo:
@@ -64,16 +71,19 @@ def test_panorama_gets_its_own_page(tmp_path: Path) -> None:
     assert len(PdfReader(str(output)).pages) == 3
 
 
-def test_book_pdf_page_size_is_10x8in_landscape(tmp_path: Path) -> None:
+def test_book_pdf_page_size_matches_blurb_spec(tmp_path: Path) -> None:
+    # Verified 2026-08-06 against Blurb's Specification Calculator for
+    # Standard Landscape, Hardcover ImageWrap, Standard paper: exported
+    # page PDF is 693x594pt (trim 684x576pt + bleed). Not 720x576pt
+    # (10x8in) -- the real trim is 9.5x8in despite the "10x8" name.
     photos = [_landscape(tmp_path, "a.jpg")]
     output = tmp_path / "book.pdf"
 
     build_book_pdf(photos, output)
 
     page = PdfReader(str(output)).pages[0]
-    # 1in = 72pt.
-    assert round(float(page.mediabox.width)) == 720
-    assert round(float(page.mediabox.height)) == 576
+    assert round(float(page.mediabox.width)) == 693
+    assert round(float(page.mediabox.height)) == 594
 
 
 def test_caption_present_and_absent(tmp_path: Path) -> None:
@@ -112,3 +122,13 @@ def test_page_to_template_data_rejects_rows_that_dont_match_slot_count(tmp_path:
 
     with pytest.raises(ValueError, match="doesn't match"):
         _page_to_template_data(mismatched_page)
+
+
+def test_safe_area_leaves_a_sane_positive_content_region() -> None:
+    # Sanity check on the Blurb-spec constants themselves: the safe area
+    # (page minus bleed+margin insets on all sides) must still leave a
+    # reasonably large content region, not something degenerate.
+    content_width = PAGE_WIDTH_PT - 2 * _SAFE_AREA_LEFT_RIGHT_PT
+    content_height = PAGE_HEIGHT_PT - 2 * _SAFE_AREA_TOP_BOTTOM_PT
+    assert content_width > 500  # > ~7in
+    assert content_height > 450  # > ~6in
