@@ -124,11 +124,11 @@ def test_page_to_template_data_rejects_rows_that_dont_match_slot_count(tmp_path:
         _page_to_template_data(mismatched_page)
 
 
-def test_safe_area_leaves_a_sane_positive_content_region() -> None:
-    # Sanity check on the Blurb-spec constants themselves: the safe area
-    # (page minus bleed+margin insets on all sides) must still leave a
-    # reasonably large content region, not something degenerate.
+def test_safe_area_matches_the_blurb_spec_constants() -> None:
+    # Exact, not a loose bound: these are fixed constants pulled from
+    # Blurb's spec, so a wrong value (e.g. a typo) should fail this test
+    # rather than slide under a generous ">" threshold.
     content_width = PAGE_WIDTH_PT - 2 * _SAFE_AREA_LEFT_RIGHT_PT
     content_height = PAGE_HEIGHT_PT - 2 * _SAFE_AREA_TOP_BOTTOM_PT
-    assert content_width > 500  # > ~7in
-    assert content_height > 450  # > ~6in
+    assert content_width == 603
+    assert content_height == 540
