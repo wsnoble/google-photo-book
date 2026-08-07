@@ -541,6 +541,50 @@ trim 1447×604pt (92pg), bleed 22pt all edges, no flaps (image-wrap,
 unlike dust-jacket), spine width varies with page count (41pt @ 92pg,
 33pt @ 20pg), safe margin 18pt from trim edge.
 
+**Images ≤300 PPI verification**: added `imaging.py` —
+`prepare_for_print()` downsamples every embedded image for its actual
+placement (cached under `<output>/.image_cache`, keyed by source
+identity/mtime plus the requested cell size and fit mode) before
+embedding. `render.py` computes each slot's exact cell size in pixels
+(content area ÷ row/column split, at 300 PPI plus 15% headroom) and
+passes it through along with the fit mode for that page type.
+
+An earlier version of this used one uniform 2600px-long-edge cap
+sized for the largest placement (a full-page solo/panorama at
+~8.375×7.5in). That was **wrong** for grid pages, caught by CodeRabbit
+review: grid cells use `object-fit: cover` (crops to fill), so the
+pixel requirement depends on the source photo's aspect ratio relative
+to the cell's, not just the cell's long edge. A high-aspect-ratio
+(e.g. 16:9) photo capped at 2600px long-edge, cover-cropped into the
+worst-case 2-per-page portrait cell (~1256×2250px @300ppi), came out
+to only ~195 PPI — well under target. Fixed by sizing per placement:
+
+-   `fit="cover"` (grid pages): scale so *both* dimensions are at
+    least the cell size, preserving aspect ratio — the tightest safe
+    size for a cover-crop.
+-   `fit="contain"` (solo/panorama pages, shown uncropped): cap the
+    long edge to the larger of the two cell dimensions — sufficient
+    since contain-fit never crops.
+-   Never upsamples past the original source resolution either way.
+
+Verified on the real album: file size dropped further, from ~244MB
+(uniform-cap version) to ~168MB (placement-aware version), all page
+types still render correctly at 150dpi preview (including the
+worst-case 2-per-page grid page), and the per-slot math now
+guarantees ≥300 PPI for every placement, not just the largest one.
+
+**Embedded fonts verification**: confirmed via `pypdf` that the
+generated PDF embeds an actual subsetted font file (`/FontFile2`,
+not just a font name) for whichever font WeasyPrint resolved from the
+`Georgia, "Times New Roman", serif` CSS stack on the machine that
+generated it. Embedding itself works correctly regardless of which
+font resolves — but since the font choice itself is still an open
+decision (see Decisions & Defaults), and different machines could
+resolve the stack differently (e.g. no Georgia on Linux CI), once a
+final font is picked it should be bundled via `@font-face` with a
+font file shipped in the repo, not left to system-font fallback, so
+the book renders identically regardless of what machine builds it.
+
 ## Milestone 5
 
 Polish
