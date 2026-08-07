@@ -220,3 +220,6 @@ __marimo__/
 # Real photo data (personal, not for version control)
 /GERT - highlights/
 /build/
+
+# macOS
+.DS_Store

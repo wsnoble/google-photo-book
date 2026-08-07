@@ -5,7 +5,7 @@
 <title>{{ book_title }}</title>
 <style>
   @page {
-    size: {{ page_width }} {{ page_height }};
+    size: {{ page_width_pt }}pt {{ page_height_pt }}pt;
     margin: 0;
   }
   * {
@@ -16,15 +16,24 @@
     font-family: Georgia, "Times New Roman", serif;
   }
   .page {
-    width: {{ page_width }};
-    height: {{ page_height }};
-    display: flex;
-    flex-direction: column;
+    width: {{ page_width_pt }}pt;
+    height: {{ page_height_pt }}pt;
     break-after: page;
     background: white;
   }
   .page:last-child {
     break-after: auto;
+  }
+  /* Inset from the page edge by bleed + safe margin (conservatively on
+     all four sides -- see render.py's _SAFE_AREA_* comment for why) so
+     nothing lands where trimming could cut it or the binding could
+     obscure it. */
+  .safe-area {
+    width: calc(100% - {{ safe_area_left_right_pt * 2 }}pt);
+    height: calc(100% - {{ safe_area_top_bottom_pt * 2 }}pt);
+    margin: {{ safe_area_top_bottom_pt }}pt {{ safe_area_left_right_pt }}pt;
+    display: flex;
+    flex-direction: column;
   }
   .row {
     flex: 1;
@@ -92,20 +101,22 @@
 <body>
 {% for page in pages %}
 <div class="page {{ 'grid' if page.is_grid else 'solo' }}">
-  {% for row in page.rows %}
-  <div class="row">
-    {% for slot in row %}
-    <div class="cell">
-      <div class="image-box">
-        <img src="{{ slot.image_uri }}" alt="">
+  <div class="safe-area">
+    {% for row in page.rows %}
+    <div class="row">
+      {% for slot in row %}
+      <div class="cell">
+        <div class="image-box">
+          <img src="{{ slot.image_uri }}" alt="">
+        </div>
+        {% if slot.caption %}
+        <div class="caption">{{ slot.caption }}</div>
+        {% endif %}
       </div>
-      {% if slot.caption %}
-      <div class="caption">{{ slot.caption }}</div>
-      {% endif %}
+      {% endfor %}
     </div>
     {% endfor %}
   </div>
-  {% endfor %}
 </div>
 {% endfor %}
 </body>

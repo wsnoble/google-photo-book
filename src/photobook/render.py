@@ -27,12 +27,29 @@ pillow_heif.register_heif_opener()
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-# Provisional: 10x8in landscape with no bleed/margin, matching Blurb's
-# "Standard Landscape 10x8" naming. Not yet reconciled against Blurb's
-# Specification Calculator (page size, bleed, and safety margin per
-# size/paper/cover combination) -- that's Milestone 4.
-PAGE_WIDTH = "10in"
-PAGE_HEIGHT = "8in"
+# Verified 2026-08-06 against Blurb's Specification Calculator
+# (https://www.blurb.com/make/pdf_to_book/booksize_calculator) for
+# Standard Landscape, Hardcover ImageWrap, Standard paper -- identical
+# across page counts tested (20 and 92), so only the cover spine varies
+# with page count, not this interior page geometry. All in points (pt),
+# matching Blurb's own units. Note the real trim is 9.5x8in, not the
+# "10x8" the size is marketed as.
+PAGE_WIDTH_PT = 693  # exported PDF page size (trim + bleed)
+PAGE_HEIGHT_PT = 594
+_TRIM_WIDTH_PT = 684  # for reference; not needed for layout directly
+_TRIM_HEIGHT_PT = 576
+BLEED_PT = 9  # top, bottom, and outside edge only -- not the binding edge
+SAFE_MARGIN_OUTER_PT = 18  # top, bottom, outside edge
+SAFE_MARGIN_BINDING_PT = 36  # binding (gutter) edge only, double the others
+
+# The binding-edge margin (36pt) applies to only one side -- left or
+# right, depending on whether a page is recto/verso -- which this
+# layout doesn't track (no left/right-hand-page concept). Applying the
+# larger binding margin, and bleed, conservatively on BOTH left and
+# right is always safe (never places content where trimming could cut
+# it) at the cost of some usable width versus the exact per-side spec.
+_SAFE_AREA_TOP_BOTTOM_PT = BLEED_PT + SAFE_MARGIN_OUTER_PT  # 27
+_SAFE_AREA_LEFT_RIGHT_PT = BLEED_PT + SAFE_MARGIN_BINDING_PT  # 45
 
 
 def build_book_pdf(
@@ -64,8 +81,10 @@ def build_book_pdf(
     html = template.render(
         pages=page_data,
         book_title=book_title,
-        page_width=PAGE_WIDTH,
-        page_height=PAGE_HEIGHT,
+        page_width_pt=PAGE_WIDTH_PT,
+        page_height_pt=PAGE_HEIGHT_PT,
+        safe_area_top_bottom_pt=_SAFE_AREA_TOP_BOTTOM_PT,
+        safe_area_left_right_pt=_SAFE_AREA_LEFT_RIGHT_PT,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

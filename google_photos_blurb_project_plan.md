@@ -510,6 +510,37 @@ Verify:
 -   embedded fonts
 -   images meet the ≤300 PPI guidance at print size
 
+Pulled real numbers (2026-08-06) from the Specification Calculator for
+**Standard Landscape, Hardcover ImageWrap, Standard paper** — verified
+identical across page counts (20 vs 92), so only the cover spine
+varies with page count, not the interior page geometry:
+
+| | Points | Inches |
+|---|---|---|
+| Exported page PDF (what gets uploaded) | 693 × 594 | 9.625 × 8.25 |
+| Trim line (final cut size) | 684 × 576 | **9.5 × 8**, not 10×8 |
+| Bleed (top/bottom/outside edge only) | 9 | 0.125 |
+| Safe margin (top/bottom/outside) | 18 | 0.25 |
+| Safe margin (binding edge) | 36 | 0.5 |
+
+Confirms the earlier note: Blurb's "10×8" marketing name for this
+size doesn't match the real trim (9.5×8). This is exactly the
+hardcoded-assumption gap this milestone exists to catch.
+
+The binding-edge margin (0.5in) is double the other three edges
+(0.25in) and depends on whether a page is left- or right-hand in the
+spread — which the current layout doesn't track (no recto/verso
+concept). Implemented the safe margin **conservatively on both
+left/right edges** (0.5in each) rather than build recto/verso-aware
+per-page-parity logic; costs a small amount of usable content width
+but is never wrong. Revisit if reclaiming that width matters later.
+
+Cover PDF specs (not yet implemented — no cover-generation code
+exists): exported 1491×648pt @ 92 pages (1483×648pt @ 20 pages),
+trim 1447×604pt (92pg), bleed 22pt all edges, no flaps (image-wrap,
+unlike dust-jacket), spine width varies with page count (41pt @ 92pg,
+33pt @ 20pg), safe margin 18pt from trim edge.
+
 ## Milestone 5
 
 Polish
