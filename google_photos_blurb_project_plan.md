@@ -541,6 +541,36 @@ trim 1447×604pt (92pg), bleed 22pt all edges, no flaps (image-wrap,
 unlike dust-jacket), spine width varies with page count (41pt @ 92pg,
 33pt @ 20pg), safe margin 18pt from trim edge.
 
+**Images ≤300 PPI verification**: added `imaging.py` —
+`prepare_for_print()` downsamples every embedded image to a
+2600px-long-edge cap (cached under `<output>/.image_cache`, keyed by
+source mtime) before embedding. That cap is sized to comfortably
+cover the largest placement in the current layout: a full-page
+solo/panorama photo filling the ~8.375×7.5in safe area at 300 PPI
+(8.375×300 ≈ 2513px). Grid-page cells are always smaller subdivisions
+of that same safe area, so one uniform cap is correct for every
+placement — a tempting "smaller cap for grid pages" optimization was
+considered and rejected: grid cells use `object-fit: cover` (crops),
+and the actual per-cell pixel requirement depends on the source
+photo's own aspect ratio relative to the cell's, which a simple
+long-edge cap can't safely account for without real per-cell-and-
+per-photo math. Verified on the real album: file size dropped from
+~360MB to ~233MB, all page types still render correctly, and the
+math confirms ≥300 PPI even in the worst case (a full-page contain-fit
+image comes out to ~310 PPI).
+
+**Embedded fonts verification**: confirmed via `pypdf` that the
+generated PDF embeds an actual subsetted font file (`/FontFile2`,
+not just a font name) for whichever font WeasyPrint resolved from the
+`Georgia, "Times New Roman", serif` CSS stack on the machine that
+generated it. Embedding itself works correctly regardless of which
+font resolves — but since the font choice itself is still an open
+decision (see Decisions & Defaults), and different machines could
+resolve the stack differently (e.g. no Georgia on Linux CI), once a
+final font is picked it should be bundled via `@font-face` with a
+font file shipped in the repo, not left to system-font fallback, so
+the book renders identically regardless of what machine builds it.
+
 ## Milestone 5
 
 Polish

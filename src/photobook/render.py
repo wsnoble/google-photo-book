@@ -4,7 +4,6 @@ import os
 import platform
 from pathlib import Path
 
-import pillow_heif
 from jinja2 import Environment, FileSystemLoader
 
 # WeasyPrint loads pango/glib via dlopen, which on Apple Silicon Homebrew
@@ -19,11 +18,10 @@ if platform.system() == "Darwin":
 
 from weasyprint import HTML  # noqa: E402
 
+from photobook.imaging import prepare_for_print
 from photobook.layout import Page, build_pages
 from photobook.model import Photo
 from photobook.ordering import order_photos
-
-pillow_heif.register_heif_opener()
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -63,14 +61,17 @@ def build_book_pdf(
     """Render the actual photo book: panoramas get their own full-frame
     page; everything else is grouped into grid pages (mostly 4-5 photos,
     occasionally 2, cropped to fill uniform cells), captions below each
-    photo when present with no reserved space when absent.
+    photo when present with no reserved space when absent. Images are
+    downsampled to imaging.MAX_LONG_EDGE_PX before embedding (see that
+    module for why), cached under output_path.parent/.image_cache.
     """
     ordered = order_photos(
         photos, manual_order=manual_order, guess_leftover_positions=guess_leftover_positions
     )
     pages = build_pages(ordered)
 
-    page_data = [_page_to_template_data(page) for page in pages]
+    cache_dir = output_path.parent / ".image_cache"
+    page_data = [_page_to_template_data(page, cache_dir) for page in pages]
 
     # `select_autoescape` matches on filename suffix (e.g. ".html"), which
     # our "*.html.jinja" template names never match -- autoescape=True
@@ -91,7 +92,7 @@ def build_book_pdf(
     HTML(string=html).write_pdf(output_path)
 
 
-def _page_to_template_data(page: Page) -> dict:
+def _page_to_template_data(page: Page, cache_dir: Path) -> dict:
     if sum(page.rows) != len(page.slots):
         raise ValueError(
             f"Page.rows {page.rows} (sum={sum(page.rows)}) doesn't match "
@@ -99,7 +100,10 @@ def _page_to_template_data(page: Page) -> dict:
         )
 
     slot_dicts = [
-        {"image_uri": slot.photo.image_path.resolve().as_uri(), "caption": slot.photo.caption}
+        {
+            "image_uri": prepare_for_print(slot.photo.image_path, cache_dir).resolve().as_uri(),
+            "caption": slot.photo.caption,
+        }
         for slot in page.slots
     ]
     rows = []

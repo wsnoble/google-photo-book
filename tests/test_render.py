@@ -121,7 +121,7 @@ def test_page_to_template_data_rejects_rows_that_dont_match_slot_count(tmp_path:
     mismatched_page = Page(slots=[PageSlot(photo=photo, orientation="landscape")], rows=[3])
 
     with pytest.raises(ValueError, match="doesn't match"):
-        _page_to_template_data(mismatched_page)
+        _page_to_template_data(mismatched_page, tmp_path / "cache")
 
 
 def test_safe_area_matches_the_blurb_spec_constants() -> None:
