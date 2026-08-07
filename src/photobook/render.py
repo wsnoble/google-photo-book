@@ -18,7 +18,7 @@ if platform.system() == "Darwin":
 
 from weasyprint import HTML  # noqa: E402
 
-from photobook.imaging import prepare_for_print
+from photobook.imaging import FitMode, prepare_for_print
 from photobook.layout import Page, build_pages
 from photobook.model import Photo
 from photobook.ordering import order_photos
@@ -49,6 +49,19 @@ SAFE_MARGIN_BINDING_PT = 36  # binding (gutter) edge only, double the others
 _SAFE_AREA_TOP_BOTTOM_PT = BLEED_PT + SAFE_MARGIN_OUTER_PT  # 27
 _SAFE_AREA_LEFT_RIGHT_PT = BLEED_PT + SAFE_MARGIN_BINDING_PT  # 45
 
+# The actual content area available for photos, after the safe-area inset.
+_CONTENT_WIDTH_PT = PAGE_WIDTH_PT - 2 * _SAFE_AREA_LEFT_RIGHT_PT  # 603
+_CONTENT_HEIGHT_PT = PAGE_HEIGHT_PT - 2 * _SAFE_AREA_TOP_BOTTOM_PT  # 540
+
+_TARGET_PPI = 300
+# Cells are sized to the full row/column split of the content area, not
+# accounting for each cell's own padding or caption (which further shrink
+# the actual displayed image below the cell size) -- so sizing to the
+# full cell is already a conservative overestimate. This adds a little
+# more headroom on top of that for rounding, rather than sizing images to
+# the exact geometric minimum.
+_RESOLUTION_HEADROOM = 1.15
+
 
 def build_book_pdf(
     photos: list[Photo],
@@ -61,9 +74,9 @@ def build_book_pdf(
     """Render the actual photo book: panoramas get their own full-frame
     page; everything else is grouped into grid pages (mostly 4-5 photos,
     occasionally 2, cropped to fill uniform cells), captions below each
-    photo when present with no reserved space when absent. Images are
-    downsampled to imaging.MAX_LONG_EDGE_PX before embedding (see that
-    module for why), cached under output_path.parent/.image_cache.
+    photo when present with no reserved space when absent. Each photo is
+    downsampled for its actual placement (see imaging.prepare_for_print)
+    before embedding, cached under output_path.parent/.image_cache.
     """
     ordered = order_photos(
         photos, manual_order=manual_order, guess_leftover_positions=guess_leftover_positions
@@ -99,16 +112,36 @@ def _page_to_template_data(page: Page, cache_dir: Path) -> dict:
             f"its slot count ({len(page.slots)}) -- would silently drop photos."
         )
 
-    slot_dicts = [
-        {
-            "image_uri": prepare_for_print(slot.photo.image_path, cache_dir).resolve().as_uri(),
-            "caption": slot.photo.caption,
-        }
-        for slot in page.slots
-    ]
-    rows = []
-    index = 0
+    is_grid = len(page.slots) > 1
+    fit: FitMode = "cover" if is_grid else "contain"
+    # Rows split the content height equally regardless of column count
+    # (matches the CSS: each .row has flex: 1 within a flex-column .page).
+    row_height_px = _pt_to_px(_CONTENT_HEIGHT_PT / len(page.rows))
+
+    rows: list[list[dict]] = []
+    slot_index = 0
     for row_size in page.rows:
-        rows.append(slot_dicts[index : index + row_size])
-        index += row_size
-    return {"rows": rows, "is_grid": len(page.slots) > 1}
+        # Columns within a row split the content width equally (each
+        # .cell has flex: 1 within a flex-row .row).
+        cell_width_px = _pt_to_px(_CONTENT_WIDTH_PT / row_size)
+        row_slots = page.slots[slot_index : slot_index + row_size]
+        rows.append(
+            [
+                {
+                    "image_uri": prepare_for_print(
+                        slot.photo.image_path, cache_dir, cell_width_px, row_height_px, fit
+                    )
+                    .resolve()
+                    .as_uri(),
+                    "caption": slot.photo.caption,
+                }
+                for slot in row_slots
+            ]
+        )
+        slot_index += row_size
+
+    return {"rows": rows, "is_grid": is_grid}
+
+
+def _pt_to_px(points: float) -> int:
+    return round(points / 72 * _TARGET_PPI * _RESOLUTION_HEADROOM)
