@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,16 @@ from photobook import __version__
 from photobook.cli import _load_manual_order, app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def _plain_text(output: str) -> str:
+    """Strip ANSI color codes and collapse whitespace/line-wrapping, since
+    Typer's error output wraps and colors differently depending on the
+    terminal width/color support it detects -- observed to differ between
+    a local run and CI, breaking a plain substring check otherwise."""
+    return " ".join(_ANSI_RE.sub("", output).split())
 
 
 def _write_photos_json(tmp_path: Path) -> Path:
@@ -101,4 +112,4 @@ def test_build_rejects_review_file_combined_with_manual_order(tmp_path: Path) ->
     )
 
     assert result.exit_code != 0
-    assert "--review-file and --manual-order" in result.output
+    assert "--review-file and --manual-order" in _plain_text(result.output)
