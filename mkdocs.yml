@@ -1,0 +1,45 @@
+site_name: photobook
+site_description: Build a Blurb-ready hardcover photo book PDF from a Google Takeout export.
+repo_url: https://github.com/wsnoble/google-photo-book
+repo_name: wsnoble/google-photo-book
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - content.code.copy
+    - content.action.edit
+
+exclude_docs: |
+  requirements.txt
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Workflow: workflow.md
+  - CLI reference: cli-reference.md
+  - Review file format: review-file-format.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
