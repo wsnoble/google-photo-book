@@ -33,6 +33,7 @@ nav:
   - Workflow: workflow.md
   - CLI reference: cli-reference.md
   - Review file format: review-file-format.md
+  - Deploying the docs: deploying-docs.md
 
 markdown_extensions:
   - admonition

@@ -78,8 +78,10 @@ Common edits:
   to merge two chapters together; add one to split a chapter in two;
   edit `chapter_title` to rename it.
 - **Edit `tag`** — an unparenthesized value becomes that photo's real
-  caption; a parenthesized value (the auto-generated placeholders from
-  step 4) is just a reference note and won't appear in the book.
+  caption; a parenthesized value (e.g. one you or an assistant added by
+  hand to identify an otherwise-uncaptioned photo) is just a reference
+  note and won't appear in the book. Blank or parenthesized both mean
+  "no caption."
 - **Edit `solo`** — `true` forces that photo onto its own page, `false`
   forces it to always share a page with others (even a panorama), blank
   leaves it to the automatic decision.
@@ -93,7 +95,24 @@ uv run photobook build build/photos.json --review-file build/review.tsv
 Renders the actual book PDF to `build/book.pdf`, following the review
 file's order, chapter boundaries, captions, and solo-page overrides
 exactly. Re-run this as many times as you like while you keep refining
-`review.tsv` — nothing about the build step mutates the review file.
+`review.tsv` — nothing about the build step mutates the review file. A
+title page (from `book.title`/`book.subtitle` in the config file) is
+always added first. Blurb requires an even page count; the command warns
+if the total comes out odd so you can adjust before uploading.
+
+## 7. Cover
+
+```sh
+uv run photobook cover build/photos.json --front IMG_1234.jpg --back IMG_5678.jpg \
+                        --interior build/book.pdf -o build/cover.pdf
+```
+
+Renders the single-spread cover PDF (back cover, spine with the title,
+front cover with the title/subtitle) for Blurb's Hardcover ImageWrap.
+`--front`/`--back` pick which photos fill the front and back panels — see
+the [CLI reference](cli-reference.md#cover) for how the cover's exact
+dimensions are pinned to a specific interior page count, and what to do
+if that count changes.
 
 ## Simpler alternatives to a review file
 
@@ -115,16 +134,23 @@ the reference for exactly which flags it makes redundant.
 
 ## Config file
 
-Both `import` and `build` accept `--config path/to/config.yaml`. Only
-two settings currently do anything:
+`import`, `build`, and `cover` all accept `--config path/to/config.yaml`.
+Only these settings currently do anything:
 
 ```yaml
 book:
-  title: "My Trip"       # used in build's PDF metadata title
+  title: "My Trip"       # PDF metadata title, the book's title page, and the cover
+  subtitle: "Summer 2026"  # optional -- shown under the title on the title page and cover
 prefer:
   edited_images: true    # import: prefer "-edited" photo variants over originals
 ```
 
+A title containing a literal `\n` (e.g. a double-quoted YAML string like
+`"My Trip and\nthe Sequel"`) breaks onto a second line, on both the
+title page and the front cover.
+
 (The config schema has a few more fields declared for future use --
-`layout.hero_every`, `captions.enabled`, `ordering.by`, `book.size`,
-`book.cover` — but none of them are wired up to any behavior yet.)
+`layout.hero_every`, `captions.enabled`, `ordering.by`, `book.size` — but
+none of them are wired up to any behavior yet. `book.cover` is also
+unused: the `cover` command always builds a Hardcover ImageWrap cover
+regardless of this setting.)

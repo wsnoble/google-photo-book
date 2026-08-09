@@ -24,7 +24,7 @@ for chapter detection (`reverse-geocode`) and WeasyPrint.
 ### macOS: WeasyPrint / pango
 
 WeasyPrint loads `pango`/`glib` via `dlopen`, which on Apple Silicon
-Homebrew installs isn't on the default library search path. `photobook`
+Homebrew installations are not on the default library search path. `photobook`
 detects and works around this automatically (it patches
 `DYLD_FALLBACK_LIBRARY_PATH` before importing WeasyPrint) — you shouldn't
 need to do anything beyond `brew install pango`. If you still see an
