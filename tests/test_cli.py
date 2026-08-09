@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import typer
 from PIL import Image
+from pypdf import PdfWriter
 from typer.testing import CliRunner
 
 from photobook import __version__
@@ -132,7 +133,7 @@ def test_cover_rejects_an_unknown_front_filename(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "No photo named 'does-not-exist.jpg'" in _plain_text(result.output)
+    assert "No photo whose path ends in 'does-not-exist.jpg'" in _plain_text(result.output)
 
 
 def test_cover_rejects_an_ambiguous_filename(tmp_path: Path) -> None:
@@ -170,3 +171,51 @@ def test_cover_rejects_an_ambiguous_filename(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "matches 2 photos" in _plain_text(result.output)
+
+
+def test_cover_resolves_an_ambiguous_filename_via_a_longer_path(tmp_path: Path) -> None:
+    # The ambiguous-match error above tells the user to pass more of the
+    # path to disambiguate -- confirm that actually works, rather than
+    # being advice the matching logic can't honor.
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    image_a = dir_a / "shared.jpg"
+    image_b = dir_b / "shared.jpg"
+    Image.new("RGB", (800, 600), (10, 20, 30)).save(image_a)
+    Image.new("RGB", (800, 600), (10, 20, 30)).save(image_b)
+    photos_json = tmp_path / "photos.json"
+    photos_json.write_text(
+        json.dumps([_photo_dict(image_a), _photo_dict(image_b)]), encoding="utf-8"
+    )
+    # A real (if tiny) single-page PDF -- past --front/--back resolution,
+    # the command reads its page count, which only a valid PDF supports.
+    interior = tmp_path / "interior.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    with interior.open("wb") as f:
+        writer.write(f)
+
+    result = runner.invoke(
+        app,
+        [
+            "cover",
+            str(photos_json),
+            "--front",
+            "a/shared.jpg",
+            "--back",
+            "b/shared.jpg",
+            "--interior",
+            str(interior),
+        ],
+    )
+
+    # Resolution succeeded (no ambiguity error) -- the command proceeds
+    # far enough to hit the unrelated page-count guard instead (raised as
+    # a plain ValueError, not a typer.BadParameter, so it surfaces via
+    # result.exception rather than result.output), since our 1-page dummy
+    # interior isn't the page count the cover was verified for.
+    assert "matches 2 photos" not in _plain_text(result.output)
+    assert result.exception is not None
+    assert "Cover spine width" in str(result.exception)

@@ -37,12 +37,21 @@ def export_review_file(photos: list[Photo], path: Path) -> None:
     groups = group_into_chapters(ordered, countries)
     solo_image_paths = _compute_solo_image_paths(groups)
 
+    # One chapter row per group, unconditionally -- including a blank-title
+    # row for a None (no-country) group, and a repeated-title row for a
+    # country that reappears after a gap. Without this, load_review_file
+    # would merge those groups back into whichever one came before them
+    # (there's no other way to mark a group boundary in the file format),
+    # changing which photos share a build_pages() pattern-reset scope and
+    # silently invalidating the `solo` predictions computed below against
+    # the *real* group boundaries. Loading the file back still renders
+    # exactly one divider per distinct chapter -- render.py's own
+    # country-based dedup (not the writer) is what suppresses a duplicate
+    # divider for a repeated title, and a blank title never renders one at
+    # all -- so this doesn't add any visible extra divider pages.
     rows: list[dict] = []
-    last_chapter_title: str | None = None
     for country, group_photos in groups:
-        if country is not None and country != last_chapter_title:
-            rows.append({"row_type": "chapter", "chapter_title": country})
-            last_chapter_title = country
+        rows.append({"row_type": "chapter", "chapter_title": country or ""})
         for photo in group_photos:
             rows.append(_photo_row(photo, solo_image_paths))
 

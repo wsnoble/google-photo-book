@@ -96,25 +96,26 @@ def take_divider_photos(group_photos: list[Photo]) -> tuple[list[Photo], list[Ph
     shared budget: an ordinary photo costs 1 quadrant, a panorama costs
     _PANORAMA_QUADRANT_COST (only the first one encountered is ever
     eligible -- a second would need a whole page's worth of quadrants to
-    itself). A photo that doesn't fit in whatever budget remains when it's
-    reached -- including a force_solo=True photo, which wants a full page
-    to itself, not to share a quadrant at all -- stays in its original
-    relative position among "the rest" instead, to be handled by the
-    normal build_pages() pass (which gives a panorama a full-width row
-    paired with a couple of companions, or its own page).
+    itself). Selection stops at the first photo that doesn't fit the
+    remaining budget -- including a force_solo=True photo, which wants a
+    full page to itself, not to share a quadrant at all -- and everything
+    from there on (not just that one photo) goes to "the rest", to be
+    handled by the normal build_pages() pass. Stopping rather than
+    skipping past an ineligible photo to keep checking later ones matters
+    for book order: the caller renders divider_photos before
+    remaining_photos, so pulling a later-but-eligible photo ahead of an
+    earlier-but-ineligible one would visibly reorder the book.
     """
     divider_photos: list[Photo] = []
-    remaining_photos: list[Photo] = []
     budget = CHAPTER_DIVIDER_PHOTO_COUNT
     panorama_taken = False
-    for photo in group_photos:
+    for index, photo in enumerate(group_photos):
         is_panorama = classify_photo(photo) == "panorama"
         cost = _PANORAMA_QUADRANT_COST if is_panorama else 1
         eligible = not photo.force_solo and not (is_panorama and panorama_taken) and cost <= budget
-        if eligible:
-            divider_photos.append(photo)
-            budget -= cost
-            panorama_taken = panorama_taken or is_panorama
-        else:
-            remaining_photos.append(photo)
-    return divider_photos, remaining_photos
+        if not eligible:
+            return divider_photos, group_photos[index:]
+        divider_photos.append(photo)
+        budget -= cost
+        panorama_taken = panorama_taken or is_panorama
+    return divider_photos, []

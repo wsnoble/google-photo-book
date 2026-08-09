@@ -64,7 +64,7 @@ aspect ratio, captions below when present.
 | `--config`, `-c` | — | Optional YAML config file (see [Workflow](workflow.md#config-file)). |
 | `--manual-order` | — | Same as `proof`'s `--manual-order`. Ignored if `--review-file` is given. |
 | `--guess-leftover-positions` | off | Same as `proof`'s. Ignored if `--review-file` is given. |
-| `--chapters` | off | Groups photos into chapters by country (reverse-geocoded from GPS data), with a divider page between chapters. Photos without GPS inherit their chronologically-nearest geotagged photo's country, with no distance limit — verify visually for albums spanning long GPS gaps. First use is slow (~10s one-time cost to build the offline geocoding index). Ignored if `--review-file` is given. |
+| `--chapters` | off | Groups photos into chapters by country (reverse-geocoded from GPS data), with a divider page between chapters. Photos without GPS inherit their chronologically-nearest geotagged photo's country, with no distance limit — verify visually for albums spanning long GPS gaps. First use is slow (~10s one-time cost to build the offline geocoding index) *if the album has any geotagged photos* — skipped entirely otherwise. Ignored if `--review-file` is given. |
 | `--review-file` | — | TSV file giving full manual control over order, chapter boundaries, captions, and solo-page placement. See [Review file format](review-file-format.md). Takes full precedence over `--manual-order`, `--guess-leftover-positions`, and `--chapters`. Cannot be combined with `--manual-order`. |
 
 The command prints the number of photos actually included in the book —
@@ -131,5 +131,6 @@ existing captions carried over, and a best-effort `solo` column. See
 | `--force` | off | Overwrite an existing file at the output path. Without it, the command refuses to touch a file that already exists, since it may contain hand edits. |
 
 First use is slow (~10s one-time cost to build the offline geocoding
-index used for chapter assignment) — the command prints a note when this
-is happening.
+index used for chapter assignment) *if the album has any geotagged
+photos* — skipped entirely otherwise. The command prints a note when the
+slow path is happening.

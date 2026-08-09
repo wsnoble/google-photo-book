@@ -133,13 +133,16 @@ def test_take_divider_photos_without_a_panorama_takes_up_to_three() -> None:
     assert _names(remaining) == ["d"]
 
 
-def test_take_divider_photos_skips_force_solo_true() -> None:
+def test_take_divider_photos_stops_at_a_force_solo_true_photo() -> None:
+    # Regression test: an early ineligible photo must stop selection
+    # rather than being skipped over -- pulling "b"/"c" onto the divider
+    # ahead of "a" would render the book as b, c, a instead of a, b, c.
     photos = [_make_photo("a", force_solo=True), _make_photo("b"), _make_photo("c")]
 
     divider, remaining = take_divider_photos(photos)
 
-    assert _names(divider) == ["b", "c"]
-    assert _names(remaining) == ["a"]
+    assert _names(divider) == []
+    assert _names(remaining) == ["a", "b", "c"]
 
 
 def test_take_divider_photos_gives_a_leading_panorama_the_bottom_row_plus_one_companion() -> None:
@@ -179,17 +182,18 @@ def test_take_divider_photos_never_takes_a_second_panorama() -> None:
 
     divider, remaining = take_divider_photos(photos)
 
-    # "wide1" spends 2 of the 3 quadrant-units; "wide2" is skipped (a
-    # second panorama is never eligible, regardless of remaining budget);
-    # "c" (cost 1) still fits in the 1 unit left over.
-    assert _names(divider) == ["wide1", "c"]
-    assert _names(remaining) == ["wide2"]
+    # "wide1" spends 2 of the 3 quadrant-units; "wide2" is a second
+    # panorama, never eligible regardless of remaining budget -- and,
+    # like any ineligible photo, stops selection there rather than being
+    # skipped in favor of "c" (which would otherwise still fit).
+    assert _names(divider) == ["wide1"]
+    assert _names(remaining) == ["wide2", "c"]
 
 
-def test_take_divider_photos_skips_a_force_solo_true_panorama() -> None:
+def test_take_divider_photos_stops_at_a_force_solo_true_panorama() -> None:
     photos = [_panorama("wide", force_solo=True), _make_photo("b"), _make_photo("c")]
 
     divider, remaining = take_divider_photos(photos)
 
-    assert _names(divider) == ["b", "c"]
-    assert _names(remaining) == ["wide"]
+    assert _names(divider) == []
+    assert _names(remaining) == ["wide", "b", "c"]

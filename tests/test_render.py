@@ -102,6 +102,7 @@ def test_title_page_omits_subtitle_when_not_given(tmp_path: Path) -> None:
 
     text = PdfReader(str(output)).pages[0].extract_text()
     assert "Our Trip" in text
+    assert "None" not in text
 
 
 def test_title_with_a_manual_line_break_still_builds_a_valid_pdf(tmp_path: Path) -> None:
@@ -262,7 +263,7 @@ def test_chapter_divider_holds_up_to_three_photos_the_rest_spill_over(tmp_path: 
     assert "Italy" in pages[1].extract_text()
 
 
-def test_chapter_divider_skips_a_force_solo_true_photo(tmp_path: Path) -> None:
+def test_chapter_divider_stops_at_a_leading_force_solo_true_photo(tmp_path: Path) -> None:
     forced = _landscape(
         tmp_path, "forced.jpg", latitude=_ROME[0], longitude=_ROME[1], force_solo=True
     )
@@ -275,11 +276,14 @@ def test_chapter_divider_skips_a_force_solo_true_photo(tmp_path: Path) -> None:
     build_book_pdf(photos, output, chapters=True)
 
     pages = PdfReader(str(output)).pages
-    # The divider absorbs the 3 non-forced photos (skipping "forced.jpg",
-    # which wants a full page to itself even though it would otherwise be
-    # divider-eligible by position), then "forced.jpg" gets its own page.
-    # Page 0 is the leading title page.
-    assert len(pages) == 3
+    # "forced.jpg" is first and ineligible (wants a full page to itself),
+    # so divider selection stops immediately rather than skipping past it
+    # to pull the 3 photos after it -- doing that would render the book
+    # as rome0, rome1, rome2, forced instead of forced, rome0, rome1,
+    # rome2. The divider page ends up with no photos on it (title only),
+    # "forced.jpg" gets its own page, and the 3 rome photos share a grid
+    # page. Page 0 is the leading title page.
+    assert len(pages) == 4
     assert "Italy" in pages[1].extract_text()
 
 

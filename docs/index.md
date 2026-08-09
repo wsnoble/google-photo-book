@@ -38,6 +38,7 @@ flowchart LR
     D -->|hand-edit| D
     B -->|build --review-file| E[book.pdf]
     B -->|cover| F[cover.pdf]
+    E -->|--interior| F
 ```
 
 The [Workflow](workflow.md) page walks through this end to end. The

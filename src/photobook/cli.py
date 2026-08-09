@@ -171,8 +171,9 @@ def build(
             "with a divider page between chapters. Photos without GPS inherit their "
             "chronologically-nearest geotagged photo's country, with no distance limit — "
             "verify visually for albums spanning long GPS gaps. First use is slow "
-            "(~10s one-time cost to build the offline geocoding index). Ignored if "
-            "--review-file is given.",
+            "(~10s one-time cost to build the offline geocoding index) if the album has "
+            "any geotagged photos, skipped entirely otherwise. Ignored if --review-file "
+            "is given.",
         ),
     ] = False,
     review_file: Annotated[
@@ -214,7 +215,7 @@ def build(
     config = load_config(config_path)
     photos = load_photos(photos_json)
     order = _load_manual_order(manual_order)
-    if chapters and review_file is None:
+    if chapters and review_file is None and any(p.latitude is not None for p in photos):
         typer.echo("Reverse-geocoding photo locations for chapters (one-time ~10s cost)...")
     included_count = build_book_pdf(
         photos,
@@ -248,11 +249,16 @@ def cover(
     ],
     front: Annotated[
         str,
-        typer.Option("--front", help="Filename of the photo to use for the front cover."),
+        typer.Option(
+            "--front",
+            help="Filename of the photo to use for the front cover. If more than one photo "
+            "shares that filename, pass enough trailing path segments to disambiguate (e.g. "
+            "'2017/shared.jpg' instead of just 'shared.jpg').",
+        ),
     ],
     back: Annotated[
         str,
-        typer.Option("--back", help="Filename of the photo to use for the back cover."),
+        typer.Option("--back", help="Same as --front, for the back cover."),
     ],
     interior: Annotated[
         Path,
@@ -292,16 +298,24 @@ def cover(
     photos = load_photos(photos_json)
 
     def _find(filename: str, role: str) -> Photo:
-        matches = [p for p in photos if p.image_path.name == filename]
+        # Matches on trailing path segments, not just the bare filename --
+        # "shared.jpg" matches any photo ending in that name, but
+        # "2017/shared.jpg" only matches one whose path ends in exactly
+        # those two segments. This is what makes the ambiguous-match error
+        # below actionable: without it, suggesting "pass a longer path"
+        # would be advice the matching logic could never actually honor.
+        query_parts = Path(filename).parts
+        matches = [p for p in photos if p.image_path.parts[-len(query_parts) :] == query_parts]
         if not matches:
             raise typer.BadParameter(
-                f"No photo named {filename!r} found in {photos_json}.", param_hint=f"--{role}"
+                f"No photo whose path ends in {filename!r} found in {photos_json}.",
+                param_hint=f"--{role}",
             )
         if len(matches) > 1:
             paths = ", ".join(str(p.image_path) for p in matches)
             raise typer.BadParameter(
-                f"{filename!r} matches {len(matches)} photos ({paths}) -- pass a path that's "
-                "unique within photos.json, or rename one of the files.",
+                f"{filename!r} matches {len(matches)} photos ({paths}) -- pass more of the "
+                "path to disambiguate (e.g. a parent folder name plus the filename).",
                 param_hint=f"--{role}",
             )
         return matches[0]
@@ -358,7 +372,8 @@ def review_export(
         )
 
     photos = load_photos(photos_json)
-    typer.echo("Reverse-geocoding photo locations for chapters (one-time ~10s cost)...")
+    if any(p.latitude is not None for p in photos):
+        typer.echo("Reverse-geocoding photo locations for chapters (one-time ~10s cost)...")
     export_review_file(photos, output)
     typer.echo(f"Wrote review file with {len(photos)} photos to {output}")
 

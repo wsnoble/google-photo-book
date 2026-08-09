@@ -7,8 +7,11 @@ from PIL import Image
 from pypdf import PdfReader
 
 from photobook.cover import (
+    _PANEL_WIDTH_PT,
+    COVER_BLEED_PT,
     COVER_PAGE_HEIGHT_PT,
     COVER_PAGE_WIDTH_PT,
+    COVER_SPINE_TRIM_WIDTH_PT,
     COVER_VERIFIED_PAGE_COUNT,
     build_cover_pdf,
 )
@@ -30,6 +33,21 @@ def _make_photo(tmp_path: Path, name: str, width: int, height: int) -> Photo:
         orientation=1,
         edited=False,
     )
+
+
+def test_panels_and_spine_tile_the_full_cover_width() -> None:
+    # A cheap arithmetic invariant on the constants themselves (no PDF
+    # build needed) -- pins the relationship between the two panels, the
+    # spine, and the total page width, so editing one constant in
+    # isolation fails loudly here instead of silently producing a
+    # mis-sized cover on a physical, unreturnable printed book (exactly
+    # what happened once already -- see the comment above these
+    # constants in cover.py).
+    assert 2 * _PANEL_WIDTH_PT + COVER_SPINE_TRIM_WIDTH_PT == pytest.approx(
+        COVER_PAGE_WIDTH_PT, abs=0.01
+    )
+    assert COVER_SPINE_TRIM_WIDTH_PT > 0
+    assert COVER_BLEED_PT > 0
 
 
 def test_wrong_page_count_is_rejected(tmp_path: Path) -> None:
