@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from photobook.chapters import assign_countries, group_into_chapters
+from photobook.chapters import assign_countries, group_into_chapters, take_divider_photos
 from photobook.model import Photo
 
 _ROME = (41.9028, 12.4964)
@@ -16,6 +16,9 @@ def _make_photo(
     latitude: float | None = None,
     longitude: float | None = None,
     timestamp: datetime | None = None,
+    width: int = 800,
+    height: int = 600,
+    force_solo: bool | None = None,
 ) -> Photo:
     return Photo(
         image_path=Path(f"/album/{name}"),
@@ -24,13 +27,18 @@ def _make_photo(
         timestamp_source="photoTakenTime" if timestamp else "unknown",
         caption=None,
         google_photos_url=None,
-        width=800,
-        height=600,
+        width=width,
+        height=height,
         orientation=1,
         edited=False,
         latitude=latitude,
         longitude=longitude,
+        force_solo=force_solo,
     )
+
+
+def _panorama(name: str, *, force_solo: bool | None = None) -> Photo:
+    return _make_photo(name, width=2400, height=800, force_solo=force_solo)
 
 
 def test_geotagged_photos_get_their_real_country() -> None:
@@ -110,3 +118,78 @@ def test_group_into_chapters_groups_contiguous_runs() -> None:
         ("Italy", ["d"]),
         ("France", ["e"]),
     ]
+
+
+def _names(photos: list[Photo]) -> list[str]:
+    return [p.image_path.name for p in photos]
+
+
+def test_take_divider_photos_without_a_panorama_takes_up_to_three() -> None:
+    photos = [_make_photo(n) for n in ("a", "b", "c", "d")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    assert _names(divider) == ["a", "b", "c"]
+    assert _names(remaining) == ["d"]
+
+
+def test_take_divider_photos_skips_force_solo_true() -> None:
+    photos = [_make_photo("a", force_solo=True), _make_photo("b"), _make_photo("c")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    assert _names(divider) == ["b", "c"]
+    assert _names(remaining) == ["a"]
+
+
+def test_take_divider_photos_gives_a_leading_panorama_the_bottom_row_plus_one_companion() -> None:
+    photos = [_panorama("wide"), _make_photo("b"), _make_photo("c"), _make_photo("d")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    # Panorama costs 2 quadrant-units, leaving room for exactly 1 more.
+    assert _names(divider) == ["wide", "b"]
+    assert _names(remaining) == ["c", "d"]
+
+
+def test_take_divider_photos_finds_a_panorama_appearing_after_one_ordinary_photo() -> None:
+    photos = [_make_photo("a"), _panorama("wide"), _make_photo("c"), _make_photo("d")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    # "a" (cost 1) + "wide" (cost 2) exactly exhausts the budget of 3.
+    assert _names(divider) == ["a", "wide"]
+    assert _names(remaining) == ["c", "d"]
+
+
+def test_take_divider_photos_skips_a_panorama_if_budget_already_spent() -> None:
+    photos = [_make_photo("a"), _make_photo("b"), _make_photo("c"), _panorama("wide")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    # By the time "wide" is reached, all 3 quadrant-units are already
+    # spent on ordinary photos -- it's left for build_pages() instead,
+    # which will pair it with companions on a later page.
+    assert _names(divider) == ["a", "b", "c"]
+    assert _names(remaining) == ["wide"]
+
+
+def test_take_divider_photos_never_takes_a_second_panorama() -> None:
+    photos = [_panorama("wide1"), _panorama("wide2"), _make_photo("c")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    # "wide1" spends 2 of the 3 quadrant-units; "wide2" is skipped (a
+    # second panorama is never eligible, regardless of remaining budget);
+    # "c" (cost 1) still fits in the 1 unit left over.
+    assert _names(divider) == ["wide1", "c"]
+    assert _names(remaining) == ["wide2"]
+
+
+def test_take_divider_photos_skips_a_force_solo_true_panorama() -> None:
+    photos = [_panorama("wide", force_solo=True), _make_photo("b"), _make_photo("c")]
+
+    divider, remaining = take_divider_photos(photos)
+
+    assert _names(divider) == ["b", "c"]
+    assert _names(remaining) == ["wide"]

@@ -15,6 +15,7 @@ def test_load_config_with_no_path_returns_defaults() -> None:
     assert config.prefer.edited_images is True
     assert config.book.size == "8x10_landscape"
     assert config.book.cover == "image_wrap"
+    assert config.book.subtitle is None
 
 
 def test_load_config_reads_yaml_file(tmp_path: Path) -> None:
@@ -23,6 +24,7 @@ def test_load_config_reads_yaml_file(tmp_path: Path) -> None:
         """
 book:
   title: GERT Highlights
+  subtitle: Summer 2026
   size: 8x10_landscape
   cover: image_wrap
 
@@ -44,6 +46,7 @@ prefer:
     config = load_config(path)
 
     assert config.book.title == "GERT Highlights"
+    assert config.book.subtitle == "Summer 2026"
     assert config.layout.hero_every == 12
     assert config.prefer.edited_images is False
 

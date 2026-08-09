@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 from datetime import datetime
 
+from photobook.classify import classify_photo
 from photobook.model import Photo
 
 
@@ -81,20 +82,39 @@ def group_into_chapters(
 
 
 CHAPTER_DIVIDER_PHOTO_COUNT = 3
+# A panorama on the divider page spans the full-width bottom row instead
+# of a single quadrant (a quarter of the page is too small a fraction to
+# show one properly) -- costing both bottom quadrants at once, leaving
+# room for at most one more (ordinary) photo alongside the title.
+_PANORAMA_QUADRANT_COST = 2
 
 
 def take_divider_photos(group_photos: list[Photo]) -> tuple[list[Photo], list[Photo]]:
-    """Split a chapter's photos into (up to CHAPTER_DIVIDER_PHOTO_COUNT for
-    the divider page's quadrants, the rest). A photo with force_solo=True
-    is skipped for the divider -- it wants a full page to itself, not to
-    share a quadrant -- and stays in its original relative position among
-    "the rest" instead, to be handled by the normal build_pages() pass.
+    """Split a chapter's photos into (up to CHAPTER_DIVIDER_PHOTO_COUNT
+    quadrant-units for the divider page, the rest), preserving order.
+    Photos are taken from the front greedily, each spending from that
+    shared budget: an ordinary photo costs 1 quadrant, a panorama costs
+    _PANORAMA_QUADRANT_COST (only the first one encountered is ever
+    eligible -- a second would need a whole page's worth of quadrants to
+    itself). A photo that doesn't fit in whatever budget remains when it's
+    reached -- including a force_solo=True photo, which wants a full page
+    to itself, not to share a quadrant at all -- stays in its original
+    relative position among "the rest" instead, to be handled by the
+    normal build_pages() pass (which gives a panorama a full-width row
+    paired with a couple of companions, or its own page).
     """
     divider_photos: list[Photo] = []
     remaining_photos: list[Photo] = []
+    budget = CHAPTER_DIVIDER_PHOTO_COUNT
+    panorama_taken = False
     for photo in group_photos:
-        if len(divider_photos) < CHAPTER_DIVIDER_PHOTO_COUNT and not photo.force_solo:
+        is_panorama = classify_photo(photo) == "panorama"
+        cost = _PANORAMA_QUADRANT_COST if is_panorama else 1
+        eligible = not photo.force_solo and not (is_panorama and panorama_taken) and cost <= budget
+        if eligible:
             divider_photos.append(photo)
+            budget -= cost
+            panorama_taken = panorama_taken or is_panorama
         else:
             remaining_photos.append(photo)
     return divider_photos, remaining_photos

@@ -120,15 +120,65 @@ def test_force_solo_true_gives_an_ordinary_photo_its_own_page() -> None:
     assert _names_per_page(pages) == [["a.jpg"], ["b.jpg"], ["c.jpg"]]
 
 
-def test_force_solo_false_keeps_a_panorama_in_the_grid() -> None:
+def test_force_solo_false_panorama_is_paired_with_companions_not_squeezed_into_the_grid() -> None:
     photos = [_landscape("a.jpg"), _panorama("wide.jpg", force_solo=False), _landscape("b.jpg")]
 
     pages = build_pages(photos)
 
-    # Without the override, "wide.jpg" would force its own page (see
-    # test_panorama_gets_its_own_page_without_disrupting_the_pattern) --
-    # force_solo=False keeps it in the ordinary batch instead.
-    assert _names_per_page(pages) == [["a.jpg", "wide.jpg", "b.jpg"]]
+    # "wide.jpg" still doesn't join the uniform grid batch (a fractional
+    # cell width would crop/shrink it too much) -- it gets a dedicated
+    # page instead, paired with the next photo. "a.jpg" was the only thing
+    # pending when the panorama interrupted the batch, so it's forced out
+    # onto its own page first (same as a solo panorama would do).
+    assert _names_per_page(pages) == [["a.jpg"], ["wide.jpg", "b.jpg"]]
+    panorama_page = pages[1]
+    assert panorama_page.rows == [1, 1]
+    assert panorama_page.slots[0].photo.image_path.name == "wide.jpg"
+
+
+def test_force_solo_false_panorama_pairs_with_up_to_two_companions() -> None:
+    photos = [
+        _panorama("wide.jpg", force_solo=False),
+        _landscape("b.jpg"),
+        _landscape("c.jpg"),
+        _landscape("d.jpg"),
+    ]
+
+    pages = build_pages(photos)
+
+    # Only 2 companions max, even though a 3rd ("d.jpg") was available and
+    # ordinarily eligible.
+    assert _names_per_page(pages) == [["wide.jpg", "b.jpg", "c.jpg"], ["d.jpg"]]
+    assert pages[0].rows == [1, 2]
+
+
+def test_panorama_companion_pairing_stops_at_another_special_photo() -> None:
+    # "c.jpg" (also a panorama) must not be swallowed as a mere companion
+    # -- it needs its own solo/pairing treatment via the main loop.
+    photos = [
+        _panorama("wide.jpg", force_solo=False),
+        _landscape("b.jpg"),
+        _panorama("also_wide.jpg"),
+        _landscape("d.jpg"),
+    ]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [["wide.jpg", "b.jpg"], ["also_wide.jpg"], ["d.jpg"]]
+
+
+def test_force_solo_false_panorama_with_no_available_companion_stays_alone() -> None:
+    # The panorama is the last photo -- no companion available. Unlike an
+    # ordinary force_solo=False photo, this must NOT be merged into the
+    # preceding grid page by _absorb_unwanted_solo_pages (that would just
+    # crop/shrink it into a fractional cell, the exact thing pairing was
+    # meant to avoid) -- it stays a genuine full-width solo page instead.
+    photos = [_landscape(f"p{i}.jpg") for i in range(4)] + [_panorama("wide.jpg", force_solo=False)]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [["p0.jpg", "p1.jpg", "p2.jpg", "p3.jpg"], ["wide.jpg"]]
+    assert pages[-1].rows == [1]
 
 
 def test_force_solo_false_merges_a_leftover_page_into_the_previous_page() -> None:
@@ -143,6 +193,64 @@ def test_force_solo_false_merges_a_leftover_page_into_the_previous_page() -> Non
     # getting a page to itself.
     assert [len(page.slots) for page in pages] == [5, 4, 5, 4, 3]
     assert pages[-1].slots[-1].photo.image_path.name == "last.jpg"
+
+
+def test_force_solo_false_photo_stranded_before_a_panorama_becomes_its_leading_companion() -> None:
+    # Regression test: a solo panorama (force_solo=True) flushes the batch
+    # right before it, so a single force_solo=False photo left pending at
+    # that moment used to get flushed to its own page -- and
+    # _absorb_unwanted_solo_pages couldn't rescue it afterwards, since the
+    # preceding page (the solo panorama) is also single-photo. It must
+    # instead join the *next* panorama's companion row.
+    photos = [
+        _panorama("first_wide.jpg", force_solo=True),
+        _landscape("stranded.jpg", force_solo=False),
+        _panorama("second_wide.jpg", force_solo=False),
+        _landscape("companion.jpg"),
+    ]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [
+        ["first_wide.jpg"],
+        ["second_wide.jpg", "stranded.jpg", "companion.jpg"],
+    ]
+    assert pages[1].rows == [1, 2]
+
+
+def test_force_solo_false_panorama_at_the_end_pulls_leading_companions_from_the_batch() -> None:
+    # Regression test: with no photo left after it (e.g. the panorama is
+    # the last photo in its chapter), _take_companions finds nothing --
+    # but two force_solo=False photos were sitting in the pending batch
+    # right in front of it and must be pulled in as leading companions
+    # instead of being flushed as their own page, leaving the panorama
+    # stranded alone.
+    photos = [
+        _landscape("a.jpg", force_solo=False),
+        _landscape("b.jpg", force_solo=False),
+        _panorama("wide.jpg", force_solo=False),
+    ]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [["wide.jpg", "a.jpg", "b.jpg"]]
+    assert pages[0].rows == [1, 2]
+
+
+def test_force_solo_false_panorama_only_pulls_force_solo_false_batch_items() -> None:
+    # A batch item that isn't explicitly force_solo=False (force_solo=None
+    # here) stops the pull, same as it would if it were the sole pending
+    # item -- it's forced out onto its own page instead of being swept in
+    # as a companion just because it happened to be adjacent.
+    photos = [
+        _landscape("a.jpg"),
+        _landscape("b.jpg", force_solo=False),
+        _panorama("wide.jpg", force_solo=False),
+    ]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [["a.jpg"], ["wide.jpg", "b.jpg"]]
 
 
 def test_force_solo_false_photo_with_no_neighboring_grid_page_stays_alone() -> None:

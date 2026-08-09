@@ -19,7 +19,7 @@ if platform.system() == "Darwin":
 from weasyprint import HTML  # noqa: E402
 
 from photobook.chapters import assign_countries, group_into_chapters, take_divider_photos
-from photobook.classify import effective_dimensions
+from photobook.classify import classify_photo, effective_dimensions
 from photobook.fonts import font_template_context
 from photobook.imaging import prepare_for_print
 from photobook.layout import Page, build_pages
@@ -71,27 +71,45 @@ _RESOLUTION_HEADROOM = 1.15
 _GRID_CELL_PADDING_PT = 0.15 * 72
 _SOLO_CELL_PADDING_PT = 0.3 * 72
 
+# Matches book.html.jinja's `.page.grid .caption` / `.page.solo .caption`
+# font-size and margin-top. `.caption` doesn't set an explicit line-height,
+# so this estimates the UA/font default rather than reading a real value --
+# deliberately on the generous side, since underestimating is what causes
+# the actual overflow bug this is meant to prevent.
+_GRID_CAPTION_FONT_SIZE_PT = 7
+_GRID_CAPTION_MARGIN_TOP_PT = 0.05 * 72
+_SOLO_CAPTION_FONT_SIZE_PT = 11
+_SOLO_CAPTION_MARGIN_TOP_PT = 0.15 * 72
+_CAPTION_LINE_HEIGHT_FACTOR = 1.35
+# Rough average character width for a serif font, as a fraction of its
+# font-size -- only used to estimate how many lines a caption wraps to,
+# so it doesn't need to be exact, just not an underestimate.
+_AVG_CHAR_WIDTH_FACTOR = 0.5
+_MAX_CAPTION_LINES = 4
+
 
 def build_book_pdf(
     photos: list[Photo],
     output_path: Path,
     *,
     book_title: str = "Photo Book",
+    book_subtitle: str | None = None,
     manual_order: list[str] | None = None,
     guess_leftover_positions: bool = False,
     chapters: bool = False,
     review_file: Path | None = None,
 ) -> int:
-    """Render the actual photo book: panoramas get their own full-frame
-    page; everything else is grouped into grid pages (mostly 4-5 photos,
-    occasionally 2). Every photo is shown at its full frame, uncropped --
-    cells are sized to each photo's own aspect ratio rather than cropping
-    to fill a uniform shape, so a photo's own dimensions decide how much
-    of the cell it actually fills, leaving whitespace rather than cutting
-    off content. Captions sit directly below each photo when present, with
-    no reserved space when absent. Each photo is downsampled for its
-    actual placement (see imaging.prepare_for_print) before embedding,
-    cached under output_path.parent/.image_cache.
+    """Render the actual photo book: a title page comes first, then
+    panoramas get their own full-frame page; everything else is grouped
+    into grid pages (mostly 4-5 photos, occasionally 2). Every photo is
+    shown at its full frame, uncropped -- cells are sized to each photo's
+    own aspect ratio rather than cropping to fill a uniform shape, so a
+    photo's own dimensions decide how much of the cell it actually fills,
+    leaving whitespace rather than cutting off content. Captions sit
+    directly below each photo when present, with no reserved space when
+    absent. Each photo is downsampled for its actual placement (see
+    imaging.prepare_for_print) before embedding, cached under
+    output_path.parent/.image_cache.
 
     With chapters=True, photos are grouped into country chapters (see
     chapters.py) with a divider page between them, and each chapter's grid
@@ -125,6 +143,15 @@ def build_book_pdf(
                 {"kind": "photos", **_page_to_template_data(page, cache_dir)}
                 for page in build_pages(ordered)
             ]
+    # A literal "\n" in book_title (e.g. from a config.yaml double-quoted
+    # string) is a deliberate manual line break, not raw HTML -- split it
+    # into separate lines here rather than templating it in unescaped.
+    title_page = {
+        "kind": "title",
+        "title_lines": book_title.split("\n"),
+        "subtitle": book_subtitle,
+    }
+    page_data = [title_page, *page_data]
 
     # `select_autoescape` matches on filename suffix (e.g. ".html"), which
     # our "*.html.jinja" template names never match -- autoescape=True
@@ -168,32 +195,75 @@ def _groups_to_page_data(
 
 
 def _chapter_page_data(title: str, divider_photos: list[Photo], cache_dir: Path) -> dict:
-    """A chapter divider page: title occupies the top-left quarter, up to
-    chapters.CHAPTER_DIVIDER_PHOTO_COUNT photos fill the remaining three
-    quadrants of a 2x2 grid (any quadrant beyond len(divider_photos) stays
-    blank) rather than the title alone taking a full page.
+    """A chapter divider page: title occupies the top-left quarter.
+
+    Up to chapters.CHAPTER_DIVIDER_PHOTO_COUNT more photos fill the rest
+    of a 2x2 grid (any quadrant beyond what's available stays blank)
+    rather than the title alone taking a full page -- *unless* one of
+    them is a panorama (chapters.take_divider_photos never selects more
+    than one), in which case it spans the full-width bottom row instead
+    of a single quadrant -- a quarter of the page is too small a fraction
+    to show one properly -- leaving at most one ordinary photo to share
+    the top row with the title.
     """
-    cell_width_pt = _CONTENT_WIDTH_PT / 2
-    cell_height_pt = _CONTENT_HEIGHT_PT / 2
+    quarter_width_pt = _CONTENT_WIDTH_PT / 2
+    quarter_height_pt = _CONTENT_HEIGHT_PT / 2
+
+    panorama = next((p for p in divider_photos if classify_photo(p) == "panorama"), None)
+    other_photos = [p for p in divider_photos if p is not panorama]
+
+    top_photo = (
+        _photo_cell_data(other_photos[0], cache_dir, quarter_width_pt, quarter_height_pt)
+        if other_photos
+        else None
+    )
+
+    if panorama is not None:
+        return {
+            "kind": "chapter",
+            "title": title,
+            "top_photo": top_photo,
+            "panorama": _photo_cell_data(panorama, cache_dir, _CONTENT_WIDTH_PT, quarter_height_pt),
+            "bottom_photos": [],
+        }
+
+    return {
+        "kind": "chapter",
+        "title": title,
+        "top_photo": top_photo,
+        "panorama": None,
+        "bottom_photos": [
+            _photo_cell_data(photo, cache_dir, quarter_width_pt, quarter_height_pt)
+            for photo in other_photos[1:3]
+        ],
+    }
+
+
+def _photo_cell_data(
+    photo: Photo, cache_dir: Path, cell_width_pt: float, cell_height_pt: float
+) -> dict:
+    """image_uri + image_max_{width,height}_pt for one photo shown at
+    cell_width_pt x cell_height_pt (grid-style padding/caption sizing --
+    used for every multi-photo-per-page cell, chapter divider quadrants
+    included; solo/panorama-alone pages size directly in
+    _page_to_template_data instead, with their own larger padding).
+    """
     cell_width_px = _pt_to_px(cell_width_pt)
     cell_height_px = _pt_to_px(cell_height_pt)
-    photos = [
-        {
-            "image_uri": prepare_for_print(
-                photo.image_path, cache_dir, cell_width_px, cell_height_px
-            )
-            .resolve()
-            .as_uri(),
-            "caption": photo.caption,
-            **_image_box_pt(
-                photo,
-                cell_width_pt - 2 * _GRID_CELL_PADDING_PT,
-                cell_height_pt - 2 * _GRID_CELL_PADDING_PT,
-            ),
-        }
-        for photo in divider_photos
-    ]
-    return {"kind": "chapter", "title": title, "photos": photos}
+    available_width_pt = cell_width_pt - 2 * _GRID_CELL_PADDING_PT
+    return {
+        "image_uri": prepare_for_print(photo.image_path, cache_dir, cell_width_px, cell_height_px)
+        .resolve()
+        .as_uri(),
+        "caption": photo.caption,
+        **_image_box_pt(
+            photo,
+            available_width_pt,
+            cell_height_pt
+            - 2 * _GRID_CELL_PADDING_PT
+            - _caption_reservation_pt(photo.caption, available_width_pt, is_grid=True),
+        ),
+    }
 
 
 def _page_to_template_data(page: Page, cache_dir: Path) -> dict:
@@ -217,6 +287,7 @@ def _page_to_template_data(page: Page, cache_dir: Path) -> dict:
         # .cell has flex: 1 within a flex-row .row).
         cell_width_pt = _CONTENT_WIDTH_PT / row_size
         cell_width_px = _pt_to_px(cell_width_pt)
+        available_width_pt = cell_width_pt - 2 * padding_pt
         row_slots = page.slots[slot_index : slot_index + row_size]
         slot_dicts = []
         for slot in row_slots:
@@ -230,8 +301,12 @@ def _page_to_template_data(page: Page, cache_dir: Path) -> dict:
                     "caption": slot.photo.caption,
                     **_image_box_pt(
                         slot.photo,
-                        cell_width_pt - 2 * padding_pt,
-                        row_height_pt - 2 * padding_pt,
+                        available_width_pt,
+                        row_height_pt
+                        - 2 * padding_pt
+                        - _caption_reservation_pt(
+                            slot.photo.caption, available_width_pt, is_grid=is_grid
+                        ),
                     ),
                 }
             )
@@ -259,6 +334,14 @@ def _image_box_pt(photo: Photo, available_width_pt: float, available_height_pt: 
     (e.g. height: 100%) is exactly what recreates the oversized-box
     problem this avoids.
     """
+    # A caption reservation subtracted by the caller could, for a
+    # pathologically long caption in a tiny cell, leave zero or negative
+    # height. Floor it so the image never inverts/disappears -- worst case
+    # the caption overlaps it slightly, rather than the geometry breaking
+    # outright.
+    available_width_pt = max(available_width_pt, 1.0)
+    available_height_pt = max(available_height_pt, 1.0)
+
     width, height = effective_dimensions(photo)
     if width <= 0 or height <= 0:
         return {
@@ -271,6 +354,34 @@ def _image_box_pt(photo: Photo, available_width_pt: float, available_height_pt: 
         "image_max_width_pt": width * scale,
         "image_max_height_pt": height * scale,
     }
+
+
+def _caption_reservation_pt(caption: str | None, cell_width_pt: float, *, is_grid: bool) -> float:
+    """How much height (pt) to reserve below a photo for its caption, so
+    the image is sized to leave room for it instead of the two together
+    overflowing the cell (the image box was previously sized to the full
+    cell regardless of whether a caption would also need to fit under it).
+    0 when there's no caption.
+
+    Estimates how many lines the caption will wrap to from its length and
+    the cell's width, since the real answer depends on WeasyPrint's actual
+    text shaping, which isn't available here -- deliberately conservative
+    (see the module-level caption constants' comment), capped at
+    _MAX_CAPTION_LINES so one pathologically long caption can't shrink the
+    image to nothing.
+    """
+    if not caption:
+        return 0.0
+
+    font_size_pt = _GRID_CAPTION_FONT_SIZE_PT if is_grid else _SOLO_CAPTION_FONT_SIZE_PT
+    margin_top_pt = _GRID_CAPTION_MARGIN_TOP_PT if is_grid else _SOLO_CAPTION_MARGIN_TOP_PT
+
+    avg_char_width_pt = font_size_pt * _AVG_CHAR_WIDTH_FACTOR
+    chars_per_line = max(1, int(cell_width_pt / avg_char_width_pt))
+    estimated_lines = min(_MAX_CAPTION_LINES, -(-len(caption) // chars_per_line))  # ceil div
+
+    line_height_pt = font_size_pt * _CAPTION_LINE_HEIGHT_FACTOR
+    return margin_top_pt + estimated_lines * line_height_pt
 
 
 def _pt_to_px(points: float) -> int:
