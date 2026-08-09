@@ -181,18 +181,26 @@ def _absorb_unwanted_solo_pages(pages: list[Page]) -> list[Page]:
     grid row would give it only a fraction of a cell's width, exactly what
     pairing it with companions instead of a plain solo page was meant to
     avoid. Left as a genuine full-width page in that rare case instead.
+
+    Also excludes merging into a *preceding* panorama-plus-companions page
+    (its first slot is the panorama): that page's rows are [1, N], not a
+    uniform grid -- folding another slot in via _make_page() would
+    recompute plain grid rows from the combined slot count, discarding the
+    panorama's dedicated full-width row and squeezing it into a regular
+    cell instead.
     """
     result: list[Page | None] = list(pages)
     for i, page in enumerate(pages):
+        previous = result[i - 1] if i > 0 else None
         if (
             len(page.slots) == 1
             and page.slots[0].photo.force_solo is False
             and page.slots[0].orientation != "panorama"
-            and i > 0
-            and result[i - 1] is not None
-            and len(result[i - 1].slots) > 1
+            and previous is not None
+            and len(previous.slots) > 1
+            and previous.slots[0].orientation != "panorama"
         ):
-            result[i - 1] = _make_page(result[i - 1].slots + page.slots)
+            result[i - 1] = _make_page(previous.slots + page.slots)
             result[i] = None
     return [page for page in result if page is not None]
 

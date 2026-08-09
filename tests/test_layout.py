@@ -218,6 +218,27 @@ def test_force_solo_false_photo_stranded_before_a_panorama_becomes_its_leading_c
     assert pages[1].rows == [1, 2]
 
 
+def test_force_solo_false_leftover_does_not_get_absorbed_into_a_panorama_page() -> None:
+    # Regression test: a lone force_solo=False leftover page must not be
+    # merged into a *preceding* panorama-plus-companions page just because
+    # it has more than one slot -- that page's rows are [1, N] (a
+    # dedicated full-width panorama row plus a companion row), not a
+    # uniform grid. Folding the leftover in via the generic _make_page()
+    # path would discard that structure and squeeze the panorama into a
+    # regular grid cell.
+    photos = [
+        _panorama("wide.jpg", force_solo=False),
+        _landscape("c1.jpg"),
+        _landscape("c2.jpg"),
+        _landscape("leftover.jpg", force_solo=False),
+    ]
+
+    pages = build_pages(photos)
+
+    assert _names_per_page(pages) == [["wide.jpg", "c1.jpg", "c2.jpg"], ["leftover.jpg"]]
+    assert pages[0].rows == [1, 2]
+
+
 def test_force_solo_false_panorama_at_the_end_pulls_leading_companions_from_the_batch() -> None:
     # Regression test: with no photo left after it (e.g. the panorama is
     # the last photo in its chapter), _take_companions finds nothing --

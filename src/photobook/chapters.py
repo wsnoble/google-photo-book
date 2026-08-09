@@ -27,11 +27,11 @@ def assign_countries(photos: list[Photo]) -> list[str | None]:
     imported lazily here rather than at module load, matching cli.py's
     lazy-import pattern for WeasyPrint.
     """
-    import reverse_geocode
-
     geotagged = [p for p in photos if p.latitude is not None and p.longitude is not None]
     if not geotagged:
         return [None] * len(photos)
+
+    import reverse_geocode
 
     coords = [(p.latitude, p.longitude) for p in geotagged]
     results = reverse_geocode.search(coords)

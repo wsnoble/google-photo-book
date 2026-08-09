@@ -23,30 +23,27 @@ def _plain_text(output: str) -> str:
     return " ".join(_ANSI_RE.sub("", output).split())
 
 
+def _photo_dict(image_path: Path) -> dict:
+    return {
+        "image_path": str(image_path),
+        "metadata_path": None,
+        "timestamp": None,
+        "timestamp_source": "unknown",
+        "caption": None,
+        "google_photos_url": None,
+        "width": 800,
+        "height": 600,
+        "orientation": 1,
+        "edited": False,
+        "warnings": [],
+    }
+
+
 def _write_photos_json(tmp_path: Path) -> Path:
     image_path = tmp_path / "a.jpg"
     Image.new("RGB", (800, 600), (10, 20, 30)).save(image_path)
     photos_json = tmp_path / "photos.json"
-    photos_json.write_text(
-        json.dumps(
-            [
-                {
-                    "image_path": str(image_path),
-                    "metadata_path": None,
-                    "timestamp": None,
-                    "timestamp_source": "unknown",
-                    "caption": None,
-                    "google_photos_url": None,
-                    "width": 800,
-                    "height": 600,
-                    "orientation": 1,
-                    "edited": False,
-                    "warnings": [],
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
+    photos_json.write_text(json.dumps([_photo_dict(image_path)]), encoding="utf-8")
     return photos_json
 
 
@@ -113,3 +110,63 @@ def test_build_rejects_review_file_combined_with_manual_order(tmp_path: Path) ->
 
     assert result.exit_code != 0
     assert "--review-file and --manual-order" in _plain_text(result.output)
+
+
+def test_cover_rejects_an_unknown_front_filename(tmp_path: Path) -> None:
+    photos_json = _write_photos_json(tmp_path)
+    interior = tmp_path / "interior.pdf"
+    interior.write_bytes(b"not a real pdf")
+
+    result = runner.invoke(
+        app,
+        [
+            "cover",
+            str(photos_json),
+            "--front",
+            "does-not-exist.jpg",
+            "--back",
+            "a.jpg",
+            "--interior",
+            str(interior),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No photo named 'does-not-exist.jpg'" in _plain_text(result.output)
+
+
+def test_cover_rejects_an_ambiguous_filename(tmp_path: Path) -> None:
+    # Two photos sharing a filename in different subfolders -- picking the
+    # first match silently would risk putting the wrong image on a
+    # physical, unreturnable printed cover.
+    dir_a = tmp_path / "a"
+    dir_b = tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    image_a = dir_a / "shared.jpg"
+    image_b = dir_b / "shared.jpg"
+    Image.new("RGB", (800, 600), (10, 20, 30)).save(image_a)
+    Image.new("RGB", (800, 600), (10, 20, 30)).save(image_b)
+    photos_json = tmp_path / "photos.json"
+    photos_json.write_text(
+        json.dumps([_photo_dict(image_a), _photo_dict(image_b)]), encoding="utf-8"
+    )
+    interior = tmp_path / "interior.pdf"
+    interior.write_bytes(b"not a real pdf")
+
+    result = runner.invoke(
+        app,
+        [
+            "cover",
+            str(photos_json),
+            "--front",
+            "shared.jpg",
+            "--back",
+            "shared.jpg",
+            "--interior",
+            str(interior),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "matches 2 photos" in _plain_text(result.output)

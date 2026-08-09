@@ -297,6 +297,13 @@ def cover(
             raise typer.BadParameter(
                 f"No photo named {filename!r} found in {photos_json}.", param_hint=f"--{role}"
             )
+        if len(matches) > 1:
+            paths = ", ".join(str(p.image_path) for p in matches)
+            raise typer.BadParameter(
+                f"{filename!r} matches {len(matches)} photos ({paths}) -- pass a path that's "
+                "unique within photos.json, or rename one of the files.",
+                param_hint=f"--{role}",
+            )
         return matches[0]
 
     front_photo = _find(front, "front")
