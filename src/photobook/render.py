@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-import os
-import platform
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-# WeasyPrint loads pango/glib via dlopen, which on Apple Silicon Homebrew
-# installs isn't on the default dynamic-library search path. Fix this before
-# importing weasyprint so `photobook build` works without shell setup.
-if platform.system() == "Darwin":
-    _existing = os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
-    _brew_libs = [p for p in ("/opt/homebrew/lib", "/usr/local/lib") if os.path.isdir(p)]
-    os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = os.pathsep.join(
-        [p for p in [_existing, *_brew_libs] if p]
-    )
+# isort: off
+import photobook._weasyprint_env  # noqa: E402, F401 -- must precede the weasyprint import
 
 from weasyprint import HTML  # noqa: E402
+
+# isort: on
 
 from photobook.chapters import assign_countries, group_into_chapters, take_divider_photos
 from photobook.classify import classify_photo, effective_dimensions
