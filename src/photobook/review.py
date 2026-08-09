@@ -24,16 +24,22 @@ def load_review_file(path: Path, photos: list[Photo]) -> list[tuple[str | None, 
     "chapter" divider rows, not a per-photo field -- moving, adding, or
     deleting a divider row is how a chapter boundary is corrected.
 
-    A photo row's `tag` column becomes that photo's caption unless it's
+    A photo row's `tag` column becomes that photo's caption, replacing
+    whatever caption (if any) it had before -- unless it's blank or
     parenthesized (parenthesized tags are auto-generated reference
-    descriptions for identifying the photo, not real captions, and are
-    dropped rather than applied).
+    descriptions for identifying the photo, not real captions), in which
+    case the photo ends up with no caption. There's no way to say "leave
+    the existing caption alone" -- the review file is authoritative for
+    every column it has, matching how it's already authoritative for
+    order and membership.
 
     An optional `solo` column ("true"/"false"/blank) overrides whether a
     photo is ever alone on a page (see layout.build_pages): "true" forces
     it onto its own page, "false" forces it to always share a page, blank
-    (or the column being absent entirely, for files written before this
-    column existed) leaves it to the automatic panorama-based decision.
+    applies the automatic panorama-based decision -- explicitly, not just
+    left alone, so a blank cell can't leave a stale override in place. The
+    column being absent entirely (files written before it existed) also
+    leaves every photo's force_solo untouched at the Photo's own default.
     """
     by_path = {str(photo.image_path): photo for photo in photos}
 
@@ -66,16 +72,12 @@ def load_review_file(path: Path, photos: list[Photo]) -> list[tuple[str | None, 
                         f"{path}:{line_number}: unknown image_path {image_path!r} -- "
                         "doesn't match any photo in photos.json."
                     )
-                updates: dict = {}
                 tag = (row.get("tag") or "").strip()
-                if tag and not (tag.startswith("(") and tag.endswith(")")):
-                    updates["caption"] = tag
+                is_real_caption = tag and not (tag.startswith("(") and tag.endswith(")"))
+                updates: dict = {"caption": tag if is_real_caption else None}
                 if has_solo_column:
-                    solo = _parse_solo(row.get("solo") or "", path, line_number)
-                    if solo is not None:
-                        updates["force_solo"] = solo
-                if updates:
-                    photo = replace(photo, **updates)
+                    updates["force_solo"] = _parse_solo(row.get("solo") or "", path, line_number)
+                photo = replace(photo, **updates)
                 current_group.append(photo)
             else:
                 raise ReviewFileError(

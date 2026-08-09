@@ -10,7 +10,7 @@ from photobook.review import ReviewFileError, load_review_file
 _HEADER = "row_type\timage_path\tfilename\tdate\ttag\tchapter_title\n"
 
 
-def _make_photo(name: str, *, caption: str | None = None) -> Photo:
+def _make_photo(name: str, *, caption: str | None = None, force_solo: bool | None = None) -> Photo:
     return Photo(
         image_path=Path(f"/album/{name}"),
         metadata_path=None,
@@ -22,6 +22,7 @@ def _make_photo(name: str, *, caption: str | None = None) -> Photo:
         height=600,
         orientation=1,
         edited=False,
+        force_solo=force_solo,
     )
 
 
@@ -105,6 +106,27 @@ def test_parenthesized_tag_is_not_applied_as_a_caption(tmp_path: Path) -> None:
     assert photo.caption is None
 
 
+def test_blank_tag_clears_an_existing_caption(tmp_path: Path) -> None:
+    # review-export carries a real caption over into `tag` unparenthesized
+    # -- if the user deletes it (leaving the cell blank), that's a
+    # deliberate removal, not "leave the caption alone."
+    a = _make_photo("a.jpg", caption="An old caption")
+    tsv = _write_tsv(tmp_path, ["photo\t/album/a.jpg\ta.jpg\t\t\t"])
+
+    (_, [photo]) = load_review_file(tsv, [a])[0]
+
+    assert photo.caption is None
+
+
+def test_parenthesizing_a_previously_real_caption_also_clears_it(tmp_path: Path) -> None:
+    a = _make_photo("a.jpg", caption="An old caption")
+    tsv = _write_tsv(tmp_path, ["photo\t/album/a.jpg\ta.jpg\t\t(An old caption)\t"])
+
+    (_, [photo]) = load_review_file(tsv, [a])[0]
+
+    assert photo.caption is None
+
+
 def test_unknown_image_path_raises_with_line_number(tmp_path: Path) -> None:
     a = _make_photo("a.jpg")
     tsv = _write_tsv(tmp_path, ["photo\t/album/does-not-exist.jpg\tx.jpg\t\t\t"])
@@ -156,6 +178,18 @@ def test_solo_column_false_forces_force_solo_false(tmp_path: Path) -> None:
 
 def test_solo_column_blank_leaves_force_solo_unset(tmp_path: Path) -> None:
     a = _make_photo("a.jpg")
+    tsv = _write_tsv_with_solo_column(tmp_path, ["photo\t/album/a.jpg\ta.jpg\t\t\t\t"])
+
+    (_, [photo]) = load_review_file(tsv, [a])[0]
+
+    assert photo.force_solo is None
+
+
+def test_solo_column_blank_clears_an_existing_force_solo_override(tmp_path: Path) -> None:
+    # A blank cell means "apply the automatic decision," full stop -- it
+    # must actively reset force_solo, not just leave whatever value the
+    # input Photo already happened to carry untouched.
+    a = _make_photo("a.jpg", force_solo=True)
     tsv = _write_tsv_with_solo_column(tmp_path, ["photo\t/album/a.jpg\ta.jpg\t\t\t\t"])
 
     (_, [photo]) = load_review_file(tsv, [a])[0]
