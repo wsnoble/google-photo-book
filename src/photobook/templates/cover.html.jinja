@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ book_title }} -- cover</title>
+<style>
+  {% include "_fonts.html.jinja" %}
+  @page {
+    size: {{ page_width_pt }}pt {{ page_height_pt }}pt;
+    margin: 0;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: "EB Garamond", Garamond, Georgia, serif;
+  }
+  .cover {
+    position: relative;
+    width: {{ page_width_pt }}pt;
+    height: {{ page_height_pt }}pt;
+    background: white;
+  }
+  .panel-image {
+    position: absolute;
+    top: 0;
+    width: {{ panel_width_pt }}pt;
+    height: {{ page_height_pt }}pt;
+    object-fit: cover;
+  }
+  .back-image {
+    left: 0;
+  }
+  .front-image {
+    left: {{ front_panel_left_pt }}pt;
+  }
+  .spine {
+    position: absolute;
+    top: 0;
+    left: {{ spine_left_pt }}pt;
+    width: {{ spine_width_pt }}pt;
+    height: {{ page_height_pt }}pt;
+    background: #3b2a1f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .spine-title {
+    width: {{ page_height_pt - 2 * safe_top_pt }}pt;
+    color: #f0e6d2;
+    font-size: 15pt;
+    letter-spacing: 0.08em;
+    text-align: center;
+    white-space: nowrap;
+    transform: rotate(-90deg);
+  }
+  .front-title-block {
+    position: absolute;
+    top: {{ safe_top_pt }}pt;
+    left: {{ front_title_left_pt }}pt;
+    width: {{ front_title_width_pt }}pt;
+    text-align: center;
+  }
+  .front-title {
+    font-size: 28pt;
+    letter-spacing: 0.04em;
+    line-height: 1.25;
+    color: #202020;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.85), 0 0 3px rgba(255, 255, 255, 0.95);
+  }
+  .front-subtitle {
+    margin-top: 0.2in;
+    font-size: 15pt;
+    font-style: italic;
+    color: #333;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.85), 0 0 3px rgba(255, 255, 255, 0.95);
+  }
+</style>
+</head>
+<body>
+<div class="cover">
+  <img class="panel-image back-image" src="{{ back_image_uri }}" alt="">
+  <div class="spine">
+    <div class="spine-title">{{ book_title }}</div>
+  </div>
+  <img class="panel-image front-image" src="{{ front_image_uri }}" alt="">
+  <div class="front-title-block">
+    <div class="front-title">
+      {% for line in front_title_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+    </div>
+    {% if book_subtitle %}
+    <div class="front-subtitle">{{ book_subtitle }}</div>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

@@ -7,7 +7,7 @@ import typer
 from photobook import __version__
 from photobook.config import load_config
 from photobook.importer import scan_album
-from photobook.model import load_photos
+from photobook.model import Photo, load_photos
 from photobook.validation import summarize, write_photos_json, write_report_csv, write_report_txt
 
 app = typer.Typer(help="Build a Blurb-ready photo book from a Google Takeout album export.")
@@ -220,12 +220,98 @@ def build(
         photos,
         output,
         book_title=config.book.title,
+        book_subtitle=config.book.subtitle,
         manual_order=order,
         guess_leftover_positions=guess_leftover_positions,
         chapters=chapters,
         review_file=review_file,
     )
     typer.echo(f"Wrote book PDF with {included_count} photos to {output}")
+
+    from pypdf import PdfReader
+
+    page_count = len(PdfReader(output).pages)
+    if page_count % 2 != 0:
+        typer.echo(
+            f"Warning: {page_count} pages is odd -- Blurb's preflight check requires an "
+            "even page count and will reject this PDF as-is."
+        )
+
+
+@app.command()
+def cover(
+    photos_json: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, dir_okay=False, help="Path to the photos.json produced by `import`."
+        ),
+    ],
+    front: Annotated[
+        str,
+        typer.Option("--front", help="Filename of the photo to use for the front cover."),
+    ],
+    back: Annotated[
+        str,
+        typer.Option("--back", help="Filename of the photo to use for the back cover."),
+    ],
+    interior: Annotated[
+        Path,
+        typer.Option(
+            "--interior",
+            exists=True,
+            dir_okay=False,
+            help="Path to the already-built interior book PDF (from `build`), read to confirm "
+            "its page count matches what the cover's spine width was verified for.",
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path to write the cover PDF to."),
+    ] = Path("build/cover.pdf"),
+    config_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--config", "-c", exists=True, dir_okay=False, help="Optional YAML config file."
+        ),
+    ] = None,
+) -> None:
+    """Render the single-spread cover PDF (back cover, spine, front cover)
+    for Blurb's Hardcover ImageWrap: --front and --back photos are
+    center-cropped to fill their panel, the spine shows the title, and the
+    front panel shows the title/subtitle. The cover's spine width is a
+    fixed, hand-verified constant (see cover.COVER_VERIFIED_PAGE_COUNT) --
+    this command refuses to run if --interior's page count doesn't match.
+    """
+    # Imported lazily: this pulls in WeasyPrint, which needs system libraries
+    # (pango) not required by the other commands.
+    from pypdf import PdfReader
+
+    from photobook.cover import build_cover_pdf
+
+    config = load_config(config_path)
+    photos = load_photos(photos_json)
+
+    def _find(filename: str, role: str) -> Photo:
+        matches = [p for p in photos if p.image_path.name == filename]
+        if not matches:
+            raise typer.BadParameter(
+                f"No photo named {filename!r} found in {photos_json}.", param_hint=f"--{role}"
+            )
+        return matches[0]
+
+    front_photo = _find(front, "front")
+    back_photo = _find(back, "back")
+    interior_page_count = len(PdfReader(interior).pages)
+
+    build_cover_pdf(
+        front_photo,
+        back_photo,
+        output,
+        interior_page_count=interior_page_count,
+        book_title=config.book.title,
+        book_subtitle=config.book.subtitle,
+    )
+    typer.echo(f"Wrote cover PDF to {output}")
 
 
 @app.command(name="review-export")

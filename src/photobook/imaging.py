@@ -68,6 +68,50 @@ def prepare_for_print(
     return cached_path
 
 
+def prepare_cover_crop(
+    image_path: Path,
+    cache_dir: Path,
+    panel_width_px: int,
+    panel_height_px: int,
+) -> Path:
+    """Return a path to a print-ready copy of image_path, center-cropped
+    and resized to exactly panel_width_px x panel_height_px.
+
+    Unlike prepare_for_print (used for every interior page, which never
+    crops), a book cover panel must be filled edge-to-edge with no
+    whitespace -- so this is the one deliberate exception to the
+    interior's uncropped-everywhere design. The crop is centered: whichever
+    axis the source is proportionally wider on gets trimmed evenly from
+    both sides.
+
+    Cached in cache_dir, keyed by the source file's identity, mtime, and
+    the requested panel size, matching prepare_for_print's cache scheme.
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_path = cache_dir / f"cover-{_cache_key(image_path, panel_width_px, panel_height_px)}.jpg"
+    if cached_path.is_file():
+        return cached_path
+
+    with Image.open(image_path) as img:
+        img = ImageOps.exif_transpose(img)
+        orig_w, orig_h = img.size
+
+        target_ratio = panel_width_px / panel_height_px
+        src_ratio = orig_w / orig_h
+        if src_ratio > target_ratio:
+            crop_w = round(orig_h * target_ratio)
+            x0 = (orig_w - crop_w) // 2
+            box = (x0, 0, x0 + crop_w, orig_h)
+        else:
+            crop_h = round(orig_w / target_ratio)
+            y0 = (orig_h - crop_h) // 2
+            box = (0, y0, orig_w, y0 + crop_h)
+        img = img.crop(box).resize((panel_width_px, panel_height_px), Image.LANCZOS)
+        img.convert("RGB").save(cached_path, format="JPEG", quality=JPEG_QUALITY)
+
+    return cached_path
+
+
 def _cache_key(image_path: Path, cell_width_px: int, cell_height_px: int) -> str:
     stat = image_path.stat()
     raw = (

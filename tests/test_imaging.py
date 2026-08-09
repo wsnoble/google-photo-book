@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from photobook.imaging import prepare_for_print
+from photobook.imaging import prepare_cover_crop, prepare_for_print
 
 
 def test_caps_the_long_edge_to_the_larger_cell_dimension(tmp_path: Path) -> None:
@@ -74,3 +74,30 @@ def test_cache_key_changes_with_placement(tmp_path: Path) -> None:
     different_size = prepare_for_print(source, cache_dir, 500, 400)
 
     assert first != different_size
+
+
+def test_cover_crop_fills_the_exact_target_size(tmp_path: Path) -> None:
+    # A wider-than-target source must be cropped on width, not letterboxed
+    # or distorted -- the result exactly matches the requested panel size.
+    source = tmp_path / "wide.jpg"
+    Image.new("RGB", (3000, 1000), (10, 20, 30)).save(source)
+    cache_dir = tmp_path / "cache"
+
+    result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+    with Image.open(result) as img:
+        assert img.size == (800, 600)
+
+
+def test_cover_crop_can_upsample_a_small_source(tmp_path: Path) -> None:
+    # Unlike prepare_for_print, a cover panel must be filled edge-to-edge
+    # regardless of source resolution -- there's no "leave it smaller"
+    # fallback for a cover.
+    source = tmp_path / "small.jpg"
+    Image.new("RGB", (400, 300), (10, 20, 30)).save(source)
+    cache_dir = tmp_path / "cache"
+
+    result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+    with Image.open(result) as img:
+        assert img.size == (800, 600)
