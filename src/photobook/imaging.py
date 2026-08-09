@@ -99,11 +99,20 @@ def prepare_cover_crop(
         target_ratio = panel_width_px / panel_height_px
         src_ratio = orig_w / orig_h
         if src_ratio > target_ratio:
-            crop_w = round(orig_h * target_ratio)
+            # min(..., orig_w): src_ratio > target_ratio and crop_w's
+            # unrounded value are computed via different floating-point
+            # operations (division vs. multiplication) -- in a razor-edge
+            # near-equal-ratio case they can disagree by a rounding hair,
+            # letting round() push crop_w 1px past orig_w. Pillow would
+            # silently pad the overhang rather than error, subtly
+            # shifting the crop instead of a true center crop.
+            crop_w = min(round(orig_h * target_ratio), orig_w)
+            crop_w = max(crop_w, 1)
             x0 = (orig_w - crop_w) // 2
             box = (x0, 0, x0 + crop_w, orig_h)
         else:
-            crop_h = round(orig_w / target_ratio)
+            crop_h = min(round(orig_w / target_ratio), orig_h)
+            crop_h = max(crop_h, 1)
             y0 = (orig_h - crop_h) // 2
             box = (0, y0, orig_w, y0 + crop_h)
         img = img.crop(box).resize((panel_width_px, panel_height_px), Image.LANCZOS)

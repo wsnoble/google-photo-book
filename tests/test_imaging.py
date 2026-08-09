@@ -101,3 +101,24 @@ def test_cover_crop_can_upsample_a_small_source(tmp_path: Path) -> None:
 
     with Image.open(result) as img:
         assert img.size == (800, 600)
+
+
+def test_cover_crop_handles_near_equal_aspect_ratios(tmp_path: Path) -> None:
+    # Regression test: crop_w/crop_h is computed with round(), and the
+    # branch condition (src_ratio > target_ratio, via division) is a
+    # different floating-point computation than the crop size itself (via
+    # multiplication) -- in a near-equal-ratio case those can disagree by
+    # a rounding hair and push the rounded crop size 1px past the source
+    # dimension, which Pillow would silently zero-pad rather than error
+    # on. Sweep a range of sizes straddling the 800:600 target ratio to
+    # exercise that boundary without needing to hand-craft the exact
+    # floating-point coincidence.
+    cache_dir = tmp_path / "cache"
+    for width in range(790, 811):
+        source = tmp_path / f"src_{width}.jpg"
+        Image.new("RGB", (width, 600), (10, 20, 30)).save(source)
+
+        result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+        with Image.open(result) as img:
+            assert img.size == (800, 600)
