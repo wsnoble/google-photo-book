@@ -163,26 +163,111 @@ def build(
             "This is a best-effort guess, not a recovered fact — check the result visually.",
         ),
     ] = False,
+    chapters: Annotated[
+        bool,
+        typer.Option(
+            "--chapters",
+            help="Groups photos into chapters by country (reverse-geocoded from GPS data), "
+            "with a divider page between chapters. Photos without GPS inherit their "
+            "chronologically-nearest geotagged photo's country, with no distance limit — "
+            "verify visually for albums spanning long GPS gaps. First use is slow "
+            "(~10s one-time cost to build the offline geocoding index). Ignored if "
+            "--review-file is given.",
+        ),
+    ] = False,
+    review_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--review-file",
+            exists=True,
+            dir_okay=False,
+            help="Optional TSV file (row_type/image_path/filename/date/tag/chapter_title "
+            "columns, plus an optional solo column) giving full manual control over "
+            "order, chapter boundaries, captions, and solo-page placement: photo rows "
+            "are the book order, a photo omitted entirely is excluded from the book, "
+            "chapter boundaries come from 'chapter' divider rows (not a per-photo "
+            "field), an unparenthesized tag becomes that photo's caption, and "
+            "solo=true/false forces a photo onto/off of a page by itself (blank or the "
+            "column being absent leaves it to the automatic panorama-based decision). "
+            "Takes full precedence over --manual-order, --guess-leftover-positions, "
+            "and --chapters, which are ignored if this is given. Cannot be combined "
+            "with --manual-order.",
+        ),
+    ] = None,
 ) -> None:
-    """Render the photo book: landscape/panorama/square one per page, portraits
-    paired two-per-page, captions below when present. Page size/bleed are
-    provisional pending the Blurb spec lookup (Milestone 4).
+    """Render the Blurb-ready book PDF: panoramas get their own page,
+    everything else fills grid pages (mostly 4-5 photos, occasionally 2),
+    every photo shown uncropped at its own aspect ratio, captions below
+    when present.
     """
     # Imported lazily: this pulls in WeasyPrint, which needs system libraries
     # (pango) not required by the other commands.
     from photobook.render import build_book_pdf
 
+    if review_file is not None and manual_order is not None:
+        raise typer.BadParameter(
+            "--review-file and --manual-order can't be combined -- --review-file already "
+            "supplies its own order.",
+            param_hint="--review-file",
+        )
+
     config = load_config(config_path)
     photos = load_photos(photos_json)
     order = _load_manual_order(manual_order)
-    build_book_pdf(
+    if chapters and review_file is None:
+        typer.echo("Reverse-geocoding photo locations for chapters (one-time ~10s cost)...")
+    included_count = build_book_pdf(
         photos,
         output,
         book_title=config.book.title,
         manual_order=order,
         guess_leftover_positions=guess_leftover_positions,
+        chapters=chapters,
+        review_file=review_file,
     )
-    typer.echo(f"Wrote book PDF with {len(photos)} photos to {output}")
+    typer.echo(f"Wrote book PDF with {included_count} photos to {output}")
+
+
+@app.command(name="review-export")
+def review_export(
+    photos_json: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, dir_okay=False, help="Path to the photos.json produced by `import`."
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path to write the review TSV to."),
+    ] = Path("build/review.tsv"),
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", help="Overwrite an existing review file instead of refusing to touch it."
+        ),
+    ] = False,
+) -> None:
+    """Generate a review.tsv for hand-editing and later feeding to `build
+    --review-file`: photos ordered by timestamp (undated ones last),
+    chapters auto-assigned by country, existing captions carried over,
+    and a best-effort solo column -- see review_export.export_review_file
+    for the exact rules. Uncaptioned photos are left blank in the tag
+    column; writing a short descriptive tag for those requires actually
+    looking at each photo, which this command has no way to do.
+    """
+    from photobook.review_export import export_review_file
+
+    if output.exists() and not force:
+        raise typer.BadParameter(
+            f"{output} already exists -- pass --force to overwrite it, or a different "
+            "--output path. Refusing by default since it may contain hand edits.",
+            param_hint="--output",
+        )
+
+    photos = load_photos(photos_json)
+    typer.echo("Reverse-geocoding photo locations for chapters (one-time ~10s cost)...")
+    export_review_file(photos, output)
+    typer.echo(f"Wrote review file with {len(photos)} photos to {output}")
 
 
 def main() -> None:

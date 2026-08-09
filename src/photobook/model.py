@@ -22,6 +22,15 @@ class Photo:
     orientation: int
     edited: bool
     warnings: list[str] = field(default_factory=list)
+    latitude: float | None = None
+    longitude: float | None = None
+    # Review-time layout override (see review.py): True forces the photo
+    # onto its own page, False forces it to never be alone on a page, None
+    # (default) leaves it to the automatic panorama-based decision in
+    # layout.py. Not a raw imported fact, so it's never set during import
+    # and deliberately left out of photo_to_dict/dict_to_photo -- it's
+    # always None for a freshly-imported photo.
+    force_solo: bool | None = None
 
 
 def photo_to_dict(photo: Photo) -> dict:
@@ -37,6 +46,8 @@ def photo_to_dict(photo: Photo) -> dict:
         "orientation": photo.orientation,
         "edited": photo.edited,
         "warnings": list(photo.warnings),
+        "latitude": photo.latitude,
+        "longitude": photo.longitude,
     }
 
 
@@ -53,6 +64,8 @@ def dict_to_photo(data: dict) -> Photo:
         orientation=data["orientation"],
         edited=data["edited"],
         warnings=list(data.get("warnings", [])),
+        latitude=data.get("latitude"),
+        longitude=data.get("longitude"),
     )
 
 

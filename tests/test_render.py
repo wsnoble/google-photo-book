@@ -132,3 +132,121 @@ def test_safe_area_matches_the_blurb_spec_constants() -> None:
     content_height = PAGE_HEIGHT_PT - 2 * _SAFE_AREA_TOP_BOTTOM_PT
     assert content_width == 603
     assert content_height == 540
+
+
+_ROME = (41.9028, 12.4964)
+_PARIS = (48.8566, 2.3522)
+
+
+def test_chapters_true_inserts_divider_pages_titled_by_country(tmp_path: Path) -> None:
+    photos = [
+        _landscape(tmp_path, "rome.jpg", latitude=_ROME[0], longitude=_ROME[1]),
+        _landscape(tmp_path, "paris.jpg", latitude=_PARIS[0], longitude=_PARIS[1]),
+    ]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output, chapters=True)
+
+    pages = PdfReader(str(output)).pages
+    # Each country only has 1 photo (fewer than the divider page's 3-photo
+    # capacity), so it's absorbed directly onto the divider page itself
+    # rather than spilling onto a separate page.
+    assert len(pages) == 2
+    assert "Italy" in pages[0].extract_text()
+    assert "France" in pages[1].extract_text()
+
+
+def test_chapter_divider_holds_up_to_three_photos_the_rest_spill_over(tmp_path: Path) -> None:
+    photos = [
+        _landscape(tmp_path, f"rome{i}.jpg", latitude=_ROME[0], longitude=_ROME[1])
+        for i in range(5)
+    ]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output, chapters=True)
+
+    pages = PdfReader(str(output)).pages
+    # Divider page takes the first 3; the remaining 2 land on their own
+    # ordinary grid page.
+    assert len(pages) == 2
+    assert "Italy" in pages[0].extract_text()
+
+
+def test_chapter_divider_skips_a_force_solo_true_photo(tmp_path: Path) -> None:
+    forced = _landscape(
+        tmp_path, "forced.jpg", latitude=_ROME[0], longitude=_ROME[1], force_solo=True
+    )
+    photos = [forced] + [
+        _landscape(tmp_path, f"rome{i}.jpg", latitude=_ROME[0], longitude=_ROME[1])
+        for i in range(3)
+    ]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output, chapters=True)
+
+    pages = PdfReader(str(output)).pages
+    # The divider absorbs the 3 non-forced photos (skipping "forced.jpg",
+    # which wants a full page to itself even though it would otherwise be
+    # divider-eligible by position), then "forced.jpg" gets its own page.
+    assert len(pages) == 2
+    assert "Italy" in pages[0].extract_text()
+
+
+def test_chapters_false_default_has_no_dividers(tmp_path: Path) -> None:
+    photos = [
+        _landscape(tmp_path, "rome.jpg", latitude=_ROME[0], longitude=_ROME[1]),
+        _landscape(tmp_path, "paris.jpg", latitude=_PARIS[0], longitude=_PARIS[1]),
+    ]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output)
+
+    # No chapters requested -> both photos land on one ordinary 2-photo grid
+    # page, no divider inserted despite differing countries.
+    assert len(PdfReader(str(output)).pages) == 1
+
+
+def test_review_file_controls_order_chapters_and_captions(tmp_path: Path) -> None:
+    a = _landscape(tmp_path, "a.jpg")
+    b = _landscape(tmp_path, "b.jpg")
+    c = _landscape(tmp_path, "c.jpg")  # omitted from the review file entirely
+    tsv = tmp_path / "review.tsv"
+    tsv.write_text(
+        "row_type\timage_path\tfilename\tdate\ttag\tchapter_title\n"
+        "chapter\t\t\t\t\tFrance\n"
+        f"photo\t{b.image_path}\tb.jpg\t\tA real caption\t\n"
+        f"photo\t{a.image_path}\ta.jpg\t\t(auto description)\t\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf([a, b, c], output, review_file=tsv)
+
+    reader = PdfReader(str(output))
+    # Only 2 photos in the France group (fewer than the divider page's
+    # 3-photo capacity), so both land directly on the divider page itself,
+    # in the file's order (b before a) -- `c` was never listed, so it must
+    # not appear at all.
+    assert len(reader.pages) == 1
+    text = reader.pages[0].extract_text()
+    assert "France" in text
+    assert "A real caption" in text
+    assert "auto description" not in text
+
+
+def test_chapters_true_does_not_repeat_divider_across_a_none_labeled_gap(tmp_path: Path) -> None:
+    # rome, rome, an undated/GPS-less photo (no timestamp or GPS -> country
+    # None, can't be assigned to either chapter), then rome again. Must
+    # render exactly one "Italy" divider, not two.
+    photos = [
+        _landscape(tmp_path, "rome1.jpg", latitude=_ROME[0], longitude=_ROME[1]),
+        _landscape(tmp_path, "rome2.jpg", latitude=_ROME[0], longitude=_ROME[1]),
+        _landscape(tmp_path, "mystery.jpg"),
+        _landscape(tmp_path, "rome3.jpg", latitude=_ROME[0], longitude=_ROME[1]),
+    ]
+    output = tmp_path / "book.pdf"
+
+    build_book_pdf(photos, output, chapters=True)
+
+    text = "".join(page.extract_text() for page in PdfReader(str(output)).pages)
+    assert text.count("Italy") == 1

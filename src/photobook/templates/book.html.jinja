@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>{{ book_title }}</title>
 <style>
+  {% include "_fonts.html.jinja" %}
   @page {
     size: {{ page_width_pt }}pt {{ page_height_pt }}pt;
     margin: 0;
@@ -13,7 +14,7 @@
   }
   body {
     margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: "EB Garamond", Garamond, Georgia, serif;
   }
   .page {
     width: {{ page_width_pt }}pt;
@@ -45,42 +46,48 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     padding: 0.15in;
   }
   .page.solo .cell {
     padding: 0.3in;
   }
-  /* WeasyPrint mis-sizes (overlapping/collapsing columns) an <img> that
-     has flex-grow (e.g. `flex: 1`) directly on it once its intrinsic
-     size is large (real photos, not small test fixtures). The fix is
-     giving flex-grow to this wrapper div instead and sizing the <img>
-     with explicit width/height (100%, below) rather than flex-grow --
-     object-fit on the <img> itself is fine either way. Do not add
-     `flex: 1` (or similar) to `.image-box img` without re-verifying
-     against real, large images. */
-  .image-box {
+  /* Every photo is shown at its full frame, uncropped: image-box is sized
+     to the photo's exact rendered dimensions under object-fit: contain
+     (an inline style computed in render.py._image_box_pt, not CSS)
+     rather than stretched to fill the cell, so this centers the
+     resulting (image + caption) block as a unit in the available space,
+     with any leftover space showing as whitespace around it instead of
+     cropping the photo. */
+  .photo-block {
     flex: 1;
     min-height: 0;
+    min-width: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+  }
+  /* WeasyPrint doesn't size a plain `width/height: 100%` <img> correctly
+     when its parent is `display: flex` -- the img renders at its own
+     intrinsic size instead of filling the box (unrelated to the
+     already-solved `flex: 1` -on-the-img bug elsewhere in this file: this
+     one hits even with no flex properties on the img at all). Taking the
+     img out of flow with absolute positioning sidesteps flex-item sizing
+     entirely and reliably fills image-box -- verified against real, large
+     images; don't revert to plain width/height: 100% without re-checking
+     an actual grid page, since small test fixtures alone won't reveal it
+     (the intrinsic size becomes visually plausible enough to miss). */
+  .image-box {
+    position: relative;
+    min-height: 0;
     overflow: hidden;
   }
   .image-box img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
-  }
-  /* Grid pages (2+ photos): crop each photo to fill its cell uniformly. */
-  .page.grid .image-box img {
-    object-fit: cover;
-  }
-  /* Solo pages (panoramas, and any lone leftover photo): show the full
-     frame uncropped -- there's no grid uniformity to preserve. */
-  .page.solo .image-box img {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
     object-fit: contain;
   }
   .caption {
@@ -96,28 +103,63 @@
     margin-top: 0.05in;
     font-size: 7pt;
   }
+  .page.chapter .chapter-title-cell {
+    align-items: center;
+    justify-content: center;
+  }
+  .chapter-title {
+    font-size: 22pt;
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
+{% macro photo_cell(photo) %}
+<div class="photo-block">
+  <div class="image-box"{% if photo.image_max_width_pt %} style="width: {{ photo.image_max_width_pt }}pt; height: {{ photo.image_max_height_pt }}pt;"{% endif %}>
+    <img src="{{ photo.image_uri }}" alt="">
+  </div>
+  {% if photo.caption %}
+  <div class="caption">{{ photo.caption }}</div>
+  {% endif %}
+</div>
+{% endmacro %}
 {% for page in pages %}
+{% if page.kind == "chapter" %}
+<div class="page chapter grid">
+  <div class="safe-area">
+    <div class="row">
+      <div class="cell chapter-title-cell">
+        <div class="chapter-title">{{ page.title }}</div>
+      </div>
+      <div class="cell">
+        {% if page.photos|length > 0 %}{{ photo_cell(page.photos[0]) }}{% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell">
+        {% if page.photos|length > 1 %}{{ photo_cell(page.photos[1]) }}{% endif %}
+      </div>
+      <div class="cell">
+        {% if page.photos|length > 2 %}{{ photo_cell(page.photos[2]) }}{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
 <div class="page {{ 'grid' if page.is_grid else 'solo' }}">
   <div class="safe-area">
     {% for row in page.rows %}
     <div class="row">
       {% for slot in row %}
-      <div class="cell">
-        <div class="image-box">
-          <img src="{{ slot.image_uri }}" alt="">
-        </div>
-        {% if slot.caption %}
-        <div class="caption">{{ slot.caption }}</div>
-        {% endif %}
-      </div>
+      <div class="cell">{{ photo_cell(slot) }}</div>
       {% endfor %}
     </div>
     {% endfor %}
   </div>
 </div>
+{% endif %}
 {% endfor %}
 </body>
 </html>

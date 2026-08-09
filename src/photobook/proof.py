@@ -23,6 +23,7 @@ if platform.system() == "Darwin":
 
 from weasyprint import HTML  # noqa: E402
 
+from photobook.fonts import font_template_context
 from photobook.model import Photo
 from photobook.ordering import order_photos
 
@@ -68,6 +69,7 @@ def build_proof_pdf(
     html = template.render(
         entries=entries,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        **font_template_context(),
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

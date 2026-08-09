@@ -589,10 +589,71 @@ the book renders identically regardless of what machine builds it.
 
 Polish
 
--   Hero images
--   Chapter pages
--   Improved typography
--   Ratings support
+-   ~~Hero images~~ / ~~Ratings support~~ -- dropped. No reliable
+    "this photo is special" signal to build on (not a Google Photos
+    favorites user).
+-   **Chapter pages** (`--chapters` flag on `build`) -- done. Photos are
+    grouped into chapters by country, reverse-geocoded offline from
+    Takeout's `geoData`/`geoDataExif` (added `latitude`/`longitude` to the
+    `Photo` model; `(0.0, 0.0)` is Takeout's "no location" convention, not
+    a real coordinate, and is treated as missing). Uses the
+    `reverse_geocode` package (numpy+scipy only, no `pandas` -- lighter
+    than the alternative `reverse_geocoder`), which returns a
+    human-readable country name directly, no separate code-to-name mapping
+    needed. Verified importing it eagerly builds a k-d tree (~10s one-time
+    cost on a cold disk cache) despite its docs suggesting a lazy first
+    search -- imported lazily inside `chapters.assign_countries()` instead
+    of at module load, so it only costs anything when `--chapters` is
+    actually used, matching `cli.py`'s existing lazy-import pattern for
+    WeasyPrint.
+
+    Photos without GPS inherit the country of their chronologically-
+    nearest geotagged photo (fixed donor pool -- only real geotagged
+    photos, not photos that already inherited, so a country can't chain
+    further in time than any single inheritance step would justify). A
+    photo with neither GPS nor a timestamp gets no chapter. No cap on how
+    far in time a GPS-less photo can inherit from -- same "best-effort
+    guess, verify visually" trade-off as `ordering.guess_leftover_positions`,
+    and equally opt-in. Chapter divider pages reset the grid's 5/4/5/4/2
+    size-pattern cadence per chapter. A repeated country separated only by
+    an unresolvable (`None`) run doesn't get a second divider (tracked via
+    "last actually-rendered chapter title", not just the previous group).
+
+    Verified on the real 287-photo album: 165/287 photos have real GPS
+    data; chapters correctly picked up eight countries across the whole
+    trip history (Switzerland, Spain, Sweden, France, Denmark, Germany,
+    Italy, Ireland -- this album spans multiple trips, not one), with
+    sensible reappearance of "Switzerland" between other countries'
+    chapters (home base between trips) and no duplicate consecutive
+    dividers.
+
+    Known limitations, not solved: country-level granularity only (a
+    single-country multi-city trip gets one chapter); `--manual-order`
+    can fragment chapters if the manual order isn't roughly chronological
+    by location; `reverse_geocode` is point-based nearest-city, not
+    polygon/border-aware, so a coordinate very near a national border can
+    occasionally resolve to the wrong country.
+
+-   **Improved typography** -- done. Bundled EB Garamond (SIL OFL license
+    -- real Adobe/Monotype Garamond is proprietary and can't be
+    redistributed), Regular + Italic weights (the only two the CSS
+    actually uses), under `src/photobook/templates/fonts/`. Sourced from
+    Google Fonts' variable-font release (`EBGaramond[wght].ttf` /
+    `EBGaramond-Italic[wght].ttf` -- no static-instance files exist in
+    that repo, only variable fonts), referenced via `format(
+    "truetype-variations")`. `@font-face` lives in a new shared
+    `_fonts.html.jinja` partial, `{% include %}`d by both `book.html.jinja`
+    and `proof.html.jinja` (each template is an independent WeasyPrint
+    render call with no cross-document font registry, so it has to be
+    present in both, not just one) -- both `render.py` and `proof.py`
+    resolve the font files to absolute `file://` URIs (same pattern as
+    `image_uri`) and pass them into their `template.render()` calls via a
+    shared `photobook.fonts.font_template_context()` helper. Confirmed via
+    `pypdf` that the actual EB Garamond font is embedded (`/FontFile2`
+    present under the `EB-Garamond-Italic` subset name), not falling
+    through to a system fallback. Bundling required zero `pyproject.toml`
+    changes -- `uv_build`'s default packaging already includes all
+    non-`.py` files under `src/photobook/`.
 
 ------------------------------------------------------------------------
 
@@ -609,14 +670,15 @@ Resolved for the MVP (change via config, not code):
     numbers still need to be pulled from the
     [Specification Calculator](https://www.blurb.com/make/pdf_to_book/booksize_calculator)
     in Milestone 4.
--   No chapter support in the MVP — single flowing sequence, ordered
-    by timestamp. Chapters remain a Future Enhancement.
+-   ~~No chapter support in the MVP~~ — added in Milestone 5 as an opt-in
+    `--chapters` flag (country-level, from GPS data), not the default.
 
-Still needs your input before implementation starts:
+-   ~~Font: undecided~~ — EB Garamond, bundled directly (not a config
+    value; not left to system-font fallback), decided and implemented in
+    Milestone 5.
 
--   Font: undecided (Crimson Pro / Garamond / Palatino / other). Will
-    be wired up as a config value so it's a one-line YAML change
-    whenever you decide — not blocking Milestone 0–3 work.
+Still needs your input:
+
 -   Whether to show photo dates in the final book (vs. proof PDF
     only).
 
