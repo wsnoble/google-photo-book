@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -103,3 +104,66 @@ def test_image_dimensions_are_read(sample_takeout: Path) -> None:
 
     photo = _by_stem(result.photos, "IMG_0001")
     assert (photo.width, photo.height) == (800, 600)
+
+
+def _write_photo_with_metadata(tmp_path: Path, name: str, metadata: dict) -> None:
+    Image.new("RGB", (400, 300), (0, 0, 0)).save(tmp_path / name)
+    (tmp_path / f"{name}.supplemental-metadata.json").write_text(
+        json.dumps(metadata), encoding="utf-8"
+    )
+
+
+def test_geo_data_is_extracted_from_metadata(tmp_path: Path) -> None:
+    _write_photo_with_metadata(
+        tmp_path,
+        "IMG_1001.jpg",
+        {"geoData": {"latitude": 44.1236889, "longitude": 9.7181139}},
+    )
+
+    result = scan_album(tmp_path)
+
+    photo = _by_stem(result.photos, "IMG_1001")
+    assert photo.latitude == 44.1236889
+    assert photo.longitude == 9.7181139
+    assert "no GPS data" not in photo.warnings
+
+
+def test_zero_geo_data_is_treated_as_missing(tmp_path: Path) -> None:
+    # Takeout's convention for "no location" is (0.0, 0.0), not an absent
+    # geoData block -- must not be mistaken for a real coordinate.
+    _write_photo_with_metadata(
+        tmp_path, "IMG_1002.jpg", {"geoData": {"latitude": 0.0, "longitude": 0.0}}
+    )
+
+    result = scan_album(tmp_path)
+
+    photo = _by_stem(result.photos, "IMG_1002")
+    assert photo.latitude is None
+    assert photo.longitude is None
+    assert "no GPS data" in photo.warnings
+
+
+def test_geo_data_exif_used_as_fallback_when_geo_data_is_zero(tmp_path: Path) -> None:
+    _write_photo_with_metadata(
+        tmp_path,
+        "IMG_1003.jpg",
+        {
+            "geoData": {"latitude": 0.0, "longitude": 0.0},
+            "geoDataExif": {"latitude": 48.8566, "longitude": 2.3522},
+        },
+    )
+
+    result = scan_album(tmp_path)
+
+    photo = _by_stem(result.photos, "IMG_1003")
+    assert photo.latitude == 48.8566
+    assert photo.longitude == 2.3522
+
+
+def test_photo_with_no_geo_data_at_all_is_flagged(sample_takeout: Path) -> None:
+    result = scan_album(sample_takeout)
+
+    photo = _by_stem(result.photos, "IMG_0001")
+    assert photo.latitude is None
+    assert photo.longitude is None
+    assert "no GPS data" in photo.warnings

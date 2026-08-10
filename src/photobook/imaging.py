@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Literal
 
 import pillow_heif
 from PIL import Image, ImageOps
 
 pillow_heif.register_heif_opener()
-
-FitMode = Literal["contain", "cover"]
 
 JPEG_QUALITY = 85
 # Used when no resize is applied (source is already at or below the
@@ -24,21 +21,17 @@ def prepare_for_print(
     cache_dir: Path,
     cell_width_px: int,
     cell_height_px: int,
-    fit: FitMode,
 ) -> Path:
     """Return a path to a print-ready copy of image_path, sized for its
     actual placement (cell_width_px x cell_height_px, at 300 PPI) rather
-    than a one-size-fits-all cap:
+    than a one-size-fits-all cap.
 
-    - fit="cover" (grid pages, which crop with object-fit: cover): resize
-      so BOTH dimensions are at least the cell size, preserving aspect
-      ratio -- the tightest safe size for a cover-crop, since scaling
-      any smaller would force the renderer to upscale (losing PPI) to
-      cover the cell.
-    - fit="contain" (solo/panorama pages, shown at full frame,
-      uncropped): cap the long edge to the larger of the two cell
-      dimensions -- sufficient because contain-fit never crops, so
-      resolution is bounded by whichever axis is the tighter fit.
+    Every photo is shown at its full frame, uncropped (object-fit: contain)
+    -- cropping to fill a cell can cut off important content, so cells are
+    sized to the photo's own aspect ratio instead, leaving whitespace
+    rather than cropping. Resolution is capped to the long edge of the
+    cell, sufficient since contain-fit never crops (resolution is bounded
+    by whichever axis is the tighter fit).
 
     Never upsamples past the original: if the source is smaller than the
     target in a relevant dimension, it's used as-is (or merely
@@ -51,7 +44,7 @@ def prepare_for_print(
     unchanged photos in unchanged positions.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_path = cache_dir / f"{_cache_key(image_path, cell_width_px, cell_height_px, fit)}.jpg"
+    cached_path = cache_dir / f"{_cache_key(image_path, cell_width_px, cell_height_px)}.jpg"
     if cached_path.is_file():
         return cached_path
 
@@ -59,11 +52,8 @@ def prepare_for_print(
         img = ImageOps.exif_transpose(img)
         orig_w, orig_h = img.size
 
-        if fit == "cover":
-            needed_scale = max(cell_width_px / orig_w, cell_height_px / orig_h)
-        else:
-            long_edge_target = max(cell_width_px, cell_height_px)
-            needed_scale = long_edge_target / max(orig_w, orig_h)
+        long_edge_target = max(cell_width_px, cell_height_px)
+        needed_scale = long_edge_target / max(orig_w, orig_h)
         scale = min(needed_scale, 1.0)  # never upsample
 
         if scale < 1.0:
@@ -78,10 +68,63 @@ def prepare_for_print(
     return cached_path
 
 
-def _cache_key(image_path: Path, cell_width_px: int, cell_height_px: int, fit: FitMode) -> str:
+def prepare_cover_crop(
+    image_path: Path,
+    cache_dir: Path,
+    panel_width_px: int,
+    panel_height_px: int,
+) -> Path:
+    """Return a path to a print-ready copy of image_path, center-cropped
+    and resized to exactly panel_width_px x panel_height_px.
+
+    Unlike prepare_for_print (used for every interior page, which never
+    crops), a book cover panel must be filled edge-to-edge with no
+    whitespace -- so this is the one deliberate exception to the
+    interior's uncropped-everywhere design. The crop is centered: whichever
+    axis the source is proportionally wider on gets trimmed evenly from
+    both sides.
+
+    Cached in cache_dir, keyed by the source file's identity, mtime, and
+    the requested panel size, matching prepare_for_print's cache scheme.
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_path = cache_dir / f"cover-{_cache_key(image_path, panel_width_px, panel_height_px)}.jpg"
+    if cached_path.is_file():
+        return cached_path
+
+    with Image.open(image_path) as img:
+        img = ImageOps.exif_transpose(img)
+        orig_w, orig_h = img.size
+
+        target_ratio = panel_width_px / panel_height_px
+        src_ratio = orig_w / orig_h
+        if src_ratio > target_ratio:
+            # min(..., orig_w): src_ratio > target_ratio and crop_w's
+            # unrounded value are computed via different floating-point
+            # operations (division vs. multiplication) -- in a razor-edge
+            # near-equal-ratio case they can disagree by a rounding hair,
+            # letting round() push crop_w 1px past orig_w. Pillow would
+            # silently pad the overhang rather than error, subtly
+            # shifting the crop instead of a true center crop.
+            crop_w = min(round(orig_h * target_ratio), orig_w)
+            crop_w = max(crop_w, 1)
+            x0 = (orig_w - crop_w) // 2
+            box = (x0, 0, x0 + crop_w, orig_h)
+        else:
+            crop_h = min(round(orig_w / target_ratio), orig_h)
+            crop_h = max(crop_h, 1)
+            y0 = (orig_h - crop_h) // 2
+            box = (0, y0, orig_w, y0 + crop_h)
+        img = img.crop(box).resize((panel_width_px, panel_height_px), Image.LANCZOS)
+        img.convert("RGB").save(cached_path, format="JPEG", quality=JPEG_QUALITY)
+
+    return cached_path
+
+
+def _cache_key(image_path: Path, cell_width_px: int, cell_height_px: int) -> str:
     stat = image_path.stat()
     raw = (
         f"{image_path.resolve()}::{stat.st_mtime_ns}::{stat.st_size}"
-        f"::{cell_width_px}::{cell_height_px}::{fit}"
+        f"::{cell_width_px}::{cell_height_px}"
     )
     return hashlib.sha256(raw.encode()).hexdigest()[:24]

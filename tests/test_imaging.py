@@ -5,35 +5,15 @@ from pathlib import Path
 
 from PIL import Image
 
-from photobook.imaging import prepare_for_print
+from photobook.imaging import prepare_cover_crop, prepare_for_print
 
 
-def test_cover_fit_downsamples_so_both_dimensions_at_least_fill_the_cell(
-    tmp_path: Path,
-) -> None:
-    # 16:9 photo, worst-case cover crop into a 1256x2250 grid cell (matches
-    # the real portrait-cell scenario that motivated placement-aware sizing).
-    source = tmp_path / "wide.jpg"
-    Image.new("RGB", (5000, 2813), (10, 20, 30)).save(source)
-    cache_dir = tmp_path / "cache"
-
-    result = prepare_for_print(source, cache_dir, 1256, 2250, "cover")
-
-    with Image.open(result) as img:
-        assert img.size[0] >= 1256
-        assert img.size[1] >= 2250
-        # aspect ratio preserved
-        assert abs(img.size[0] / img.size[1] - 5000 / 2813) < 0.01
-
-
-def test_contain_fit_caps_the_long_edge_to_the_larger_cell_dimension(
-    tmp_path: Path,
-) -> None:
+def test_caps_the_long_edge_to_the_larger_cell_dimension(tmp_path: Path) -> None:
     source = tmp_path / "big.jpg"
     Image.new("RGB", (5000, 3000), (10, 20, 30)).save(source)
     cache_dir = tmp_path / "cache"
 
-    result = prepare_for_print(source, cache_dir, 2600, 2000, "contain")
+    result = prepare_for_print(source, cache_dir, 2600, 2000)
 
     with Image.open(result) as img:
         assert max(img.size) == 2600
@@ -46,18 +26,7 @@ def test_small_image_is_not_upsampled(tmp_path: Path) -> None:
     Image.new("RGB", (400, 300), (10, 20, 30)).save(source)
     cache_dir = tmp_path / "cache"
 
-    result = prepare_for_print(source, cache_dir, 2000, 1500, "contain")
-
-    with Image.open(result) as img:
-        assert img.size == (400, 300)
-
-
-def test_small_image_not_upsampled_even_for_cover_fit(tmp_path: Path) -> None:
-    source = tmp_path / "small.jpg"
-    Image.new("RGB", (400, 300), (10, 20, 30)).save(source)
-    cache_dir = tmp_path / "cache"
-
-    result = prepare_for_print(source, cache_dir, 2000, 1500, "cover")
+    result = prepare_for_print(source, cache_dir, 2000, 1500)
 
     with Image.open(result) as img:
         assert img.size == (400, 300)
@@ -68,9 +37,9 @@ def test_result_is_cached_on_second_call(tmp_path: Path) -> None:
     Image.new("RGB", (3000, 2000), (10, 20, 30)).save(source)
     cache_dir = tmp_path / "cache"
 
-    first = prepare_for_print(source, cache_dir, 1000, 800, "cover")
+    first = prepare_for_print(source, cache_dir, 1000, 800)
     first_mtime = first.stat().st_mtime_ns
-    second = prepare_for_print(source, cache_dir, 1000, 800, "cover")
+    second = prepare_for_print(source, cache_dir, 1000, 800)
 
     assert first == second
     assert second.stat().st_mtime_ns == first_mtime  # not rewritten
@@ -81,7 +50,7 @@ def test_cache_key_changes_when_source_changes(tmp_path: Path) -> None:
     Image.new("RGB", (3000, 2000), (10, 20, 30)).save(source)
     cache_dir = tmp_path / "cache"
 
-    first = prepare_for_print(source, cache_dir, 1000, 800, "cover")
+    first = prepare_for_print(source, cache_dir, 1000, 800)
 
     # Overwrite with different content and a forced, distinct mtime (some
     # filesystems have coarse mtime resolution, so don't rely on the save
@@ -89,21 +58,67 @@ def test_cache_key_changes_when_source_changes(tmp_path: Path) -> None:
     Image.new("RGB", (3000, 2000), (200, 200, 200)).save(source)
     later = source.stat().st_mtime + 5
     os.utime(source, (later, later))
-    second = prepare_for_print(source, cache_dir, 1000, 800, "cover")
+    second = prepare_for_print(source, cache_dir, 1000, 800)
 
     assert first != second
 
 
 def test_cache_key_changes_with_placement(tmp_path: Path) -> None:
-    # Same source, different cell geometry/fit must not collide in the
-    # cache -- each placement needs its own correctly-sized copy.
+    # Same source, different cell geometry must not collide in the cache --
+    # each placement needs its own correctly-sized copy.
     source = tmp_path / "photo.jpg"
     Image.new("RGB", (3000, 2000), (10, 20, 30)).save(source)
     cache_dir = tmp_path / "cache"
 
-    cover = prepare_for_print(source, cache_dir, 1000, 800, "cover")
-    contain = prepare_for_print(source, cache_dir, 1000, 800, "contain")
-    different_size = prepare_for_print(source, cache_dir, 500, 400, "cover")
+    first = prepare_for_print(source, cache_dir, 1000, 800)
+    different_size = prepare_for_print(source, cache_dir, 500, 400)
 
-    assert cover != contain
-    assert cover != different_size
+    assert first != different_size
+
+
+def test_cover_crop_fills_the_exact_target_size(tmp_path: Path) -> None:
+    # A wider-than-target source must be cropped on width, not letterboxed
+    # or distorted -- the result exactly matches the requested panel size.
+    source = tmp_path / "wide.jpg"
+    Image.new("RGB", (3000, 1000), (10, 20, 30)).save(source)
+    cache_dir = tmp_path / "cache"
+
+    result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+    with Image.open(result) as img:
+        assert img.size == (800, 600)
+
+
+def test_cover_crop_can_upsample_a_small_source(tmp_path: Path) -> None:
+    # Unlike prepare_for_print, a cover panel must be filled edge-to-edge
+    # regardless of source resolution -- there's no "leave it smaller"
+    # fallback for a cover.
+    source = tmp_path / "small.jpg"
+    Image.new("RGB", (400, 300), (10, 20, 30)).save(source)
+    cache_dir = tmp_path / "cache"
+
+    result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+    with Image.open(result) as img:
+        assert img.size == (800, 600)
+
+
+def test_cover_crop_handles_near_equal_aspect_ratios(tmp_path: Path) -> None:
+    # Regression test: crop_w/crop_h is computed with round(), and the
+    # branch condition (src_ratio > target_ratio, via division) is a
+    # different floating-point computation than the crop size itself (via
+    # multiplication) -- in a near-equal-ratio case those can disagree by
+    # a rounding hair and push the rounded crop size 1px past the source
+    # dimension, which Pillow would silently zero-pad rather than error
+    # on. Sweep a range of sizes straddling the 800:600 target ratio to
+    # exercise that boundary without needing to hand-craft the exact
+    # floating-point coincidence.
+    cache_dir = tmp_path / "cache"
+    for width in range(790, 811):
+        source = tmp_path / f"src_{width}.jpg"
+        Image.new("RGB", (width, 600), (10, 20, 30)).save(source)
+
+        result = prepare_cover_crop(source, cache_dir, 800, 600)
+
+        with Image.open(result) as img:
+            assert img.size == (800, 600)

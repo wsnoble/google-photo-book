@@ -11,6 +11,7 @@ class BookConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = "Photo Book"
+    subtitle: str | None = None
     size: str = "8x10_landscape"
     cover: Literal["image_wrap", "dust_jacket"] = "image_wrap"
 

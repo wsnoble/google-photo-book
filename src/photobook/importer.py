@@ -133,6 +133,7 @@ def _build_photo(image_path: Path, metadata_path: Path | None, edited: bool) -> 
     caption = (metadata.get("description") or "").strip() or None
     google_photos_url = metadata.get("url")
     timestamp, timestamp_source = _resolve_timestamp(metadata, image_path)
+    latitude, longitude = _resolve_geo(metadata)
     width, height, orientation = _read_image_info(image_path)
 
     warnings: list[str] = []
@@ -142,6 +143,8 @@ def _build_photo(image_path: Path, metadata_path: Path | None, edited: bool) -> 
         warnings.append("no caption")
     if timestamp_source == "unknown":
         warnings.append("timestamp unknown")
+    if latitude is None:
+        warnings.append("no GPS data")
     if width == 0 or height == 0:
         warnings.append("failed to read image dimensions")
 
@@ -157,6 +160,8 @@ def _build_photo(image_path: Path, metadata_path: Path | None, edited: bool) -> 
         orientation=orientation,
         edited=edited,
         warnings=warnings,
+        latitude=latitude,
+        longitude=longitude,
     )
 
 
@@ -183,6 +188,21 @@ def _resolve_timestamp(metadata: dict, image_path: Path) -> tuple[datetime | Non
         return exif_timestamp, "exif"
 
     return None, "unknown"
+
+
+def _resolve_geo(metadata: dict) -> tuple[float | None, float | None]:
+    """Extract (latitude, longitude) from Takeout's geoData, falling back to
+    geoDataExif. Takeout represents "no location" as (0.0, 0.0) rather than
+    omitting the block, so that's treated the same as missing data.
+    """
+    for key in ("geoData", "geoDataExif"):
+        block = metadata.get(key)
+        if not block:
+            continue
+        latitude, longitude = block.get("latitude"), block.get("longitude")
+        if latitude is not None and longitude is not None and (latitude, longitude) != (0.0, 0.0):
+            return latitude, longitude
+    return None, None
 
 
 def _read_exif_timestamp(image_path: Path) -> datetime | None:

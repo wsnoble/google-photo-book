@@ -21,6 +21,8 @@ def _sample_photo() -> Photo:
         orientation=1,
         edited=False,
         warnings=["timestamp unknown"],
+        latitude=44.1236889,
+        longitude=9.7181139,
     )
 
 
@@ -30,6 +32,19 @@ def test_dict_to_photo_round_trips_photo_to_dict() -> None:
     round_tripped = dict_to_photo(photo_to_dict(photo))
 
     assert round_tripped == photo
+
+
+def test_dict_to_photo_handles_missing_lat_lon_keys() -> None:
+    # A photos.json written before latitude/longitude existed won't have
+    # these keys at all -- must load as None, not KeyError.
+    data = photo_to_dict(_sample_photo())
+    del data["latitude"]
+    del data["longitude"]
+
+    photo = dict_to_photo(data)
+
+    assert photo.latitude is None
+    assert photo.longitude is None
 
 
 def test_dict_to_photo_handles_missing_metadata_and_timestamp() -> None:

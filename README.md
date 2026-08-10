@@ -18,22 +18,32 @@ uv sync
 ### macOS: WeasyPrint / pango caveat
 
 WeasyPrint (used for HTML → PDF rendering) loads `pango`/`glib` via
-`dlopen`, which on Apple Silicon Homebrew installs doesn't find them on
-the default library search path. If you see an error like
-`OSError: cannot load library 'libgobject-2.0-0'`, set:
-
-```sh
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
-```
-
-(or `/usr/local/lib` on Intel Macs) before running `uv run ...`, or add
-it to your shell profile.
+`dlopen`, which on Apple Silicon Homebrew installations are not on the default
+library search path. `photobook` detects and works around this
+automatically, so this normally doesn't need any manual setup. If you
+still see an error like `OSError: cannot load library
+'libgobject-2.0-0'`, confirm `pango` is actually installed (`brew list
+pango`).
 
 ## Usage
 
 ```sh
 uv run photobook --help
 ```
+
+Full docs (workflow walkthrough, CLI reference, review-file format) are
+in [`docs/`](docs/) — see [`docs/index.md`](docs/index.md) to start, or
+build them locally:
+
+```sh
+uv sync --group docs
+uv run mkdocs serve   # http://127.0.0.1:8000, live-reloads on edit
+```
+
+They're set up to publish on [Read the Docs](https://readthedocs.org/)
+via `.readthedocs.yaml` and `mkdocs.yml` — see
+[`docs/deploying-docs.md`](docs/deploying-docs.md) for the one-time
+import steps that make them live at a public URL.
 
 ## Development
 

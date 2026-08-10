@@ -14,16 +14,21 @@ _PANORAMA_RATIO = 2.0
 _ROTATED_EXIF_ORIENTATIONS = {5, 6, 7, 8}
 
 
-def classify_photo(photo: Photo) -> Orientation:
-    """Classify a photo's displayed orientation from its dimensions.
-
-    Accounts for EXIF orientation: a phone photo taken in portrait mode is
-    often stored with width > height and an EXIF rotation flag, so the raw
-    `width`/`height` don't reflect how the image actually displays.
+def effective_dimensions(photo: Photo) -> tuple[int, int]:
+    """Photo's displayed (width, height), accounting for EXIF orientation:
+    a phone photo taken in portrait mode is often stored with width >
+    height plus an EXIF rotation flag, so the raw `width`/`height` don't
+    reflect how the image actually displays.
     """
     width, height = photo.width, photo.height
     if photo.orientation in _ROTATED_EXIF_ORIENTATIONS:
         width, height = height, width
+    return width, height
+
+
+def classify_photo(photo: Photo) -> Orientation:
+    """Classify a photo's displayed orientation from its dimensions."""
+    width, height = effective_dimensions(photo)
 
     if width <= 0 or height <= 0:
         return "landscape"
